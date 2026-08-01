@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.crud import create_owned, delete_owned, get_owned, list_owned, update_owned
@@ -10,11 +11,12 @@ from app.models.database import get_db
 from app.models.domain import Investment
 from app.models.user import User
 from app.schemas import InvestmentCreate, InvestmentOut, InvestmentUpdate
+from app.services.investment_analytics import analyze_portfolio
 
 router = APIRouter(prefix="/investments", tags=["investments"])
 
 
-@router.get("", response_model=list[InvestmentOut])
+@router.get("")
 async def list_investments(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -29,6 +31,31 @@ async def create_investment(
     current_user: User = Depends(get_current_user),
 ):
     return await create_owned(db, Investment, data, current_user)
+
+
+@router.get("/analytics")
+async def investment_analytics(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Portfolio analytics: allocation, performance, and dividend yield."""
+    rows = (
+        await db.execute(
+            select(Investment).where(Investment.user_id == current_user.id)
+        )
+    ).scalars().all()
+
+    investments = [
+        {
+            "type": r.type,
+            "current_value": float(r.current_value or 0),
+            "cost_basis": float(r.cost_basis or 0),
+            "symbol": r.symbol,
+        }
+        for r in rows
+    ]
+
+    return analyze_portfolio(investments)
 
 
 @router.get("/{investment_id}", response_model=InvestmentOut)
