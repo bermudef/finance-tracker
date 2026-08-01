@@ -1,4 +1,5 @@
 from __future__ import annotations
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -26,17 +27,29 @@ def create_access_token(subject: str | int, extra: Optional[dict[str, Any]] = No
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_expire_minutes
     )
-    payload: dict[str, Any] = {"sub": str(subject), "exp": expire, "type": "access"}
+    payload: dict[str, Any] = {
+        "sub": str(subject),
+        "exp": expire,
+        "type": "access",
+        "jti": uuid.uuid4().hex,
+    }
     if extra:
         payload.update(extra)
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
 def create_refresh_token(subject: str | int) -> str:
+    """Refresh token with a unique jti — each issuance is distinguishable
+    and rotation produces distinct tokens (required for revocation)."""
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.refresh_token_expire_days
     )
-    payload: dict[str, Any] = {"sub": str(subject), "exp": expire, "type": "refresh"}
+    payload: dict[str, Any] = {
+        "sub": str(subject),
+        "exp": expire,
+        "type": "refresh",
+        "jti": uuid.uuid4().hex,
+    }
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class AccountCreate(BaseModel):
@@ -20,8 +20,7 @@ class AccountOut(BaseModel):
     opening_balance: float
     is_active: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CategoryCreate(BaseModel):
@@ -38,8 +37,7 @@ class CategoryOut(BaseModel):
     color: Optional[str]
     parent_id: Optional[int]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TransactionCreate(BaseModel):
@@ -64,8 +62,7 @@ class TransactionOut(BaseModel):
     account_name: Optional[str] = None
     category_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BudgetCreate(BaseModel):
@@ -82,5 +79,4 @@ class BudgetOut(BaseModel):
     amount: float
     period: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
