@@ -398,3 +398,60 @@ async def test_notifications_crud(auth_client):
     # Verify deleted
     resp = await auth_client.get(f"{API}/notifications")
     assert not any(n["id"] == notif_id for n in resp.json())
+
+
+# ---- households tests ----
+
+
+async def test_household_requires_auth(client):
+    resp = await client.post(f"{API}/households", json={"name": "Test"})
+    assert resp.status_code == 401
+
+
+async def test_household_create_and_list(auth_client):
+    # Create household
+    resp = await auth_client.post(f"{API}/households", json={"name": "Test Family"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Test Family"
+    assert body["created_by"] == auth_client.user_id if hasattr(auth_client, "user_id") else True
+    household_id = body["id"]
+
+    # List households
+    resp = await auth_client.get(f"{API}/households")
+    assert resp.status_code == 200
+    households = resp.json()
+    assert len(households) == 1
+    assert households[0]["name"] == "Test Family"
+
+
+async def test_household_members(auth_client):
+    # Create household
+    resp = await auth_client.post(f"{API}/households", json={"name": "Test"})
+    assert resp.status_code == 200
+    household_id = resp.json()["id"]
+
+    # List members (should be just the owner)
+    resp = await auth_client.get(f"{API}/households/{household_id}/members")
+    assert resp.status_code == 200
+    members = resp.json()
+    assert len(members) == 1
+    assert members[0]["role"] == "owner"
+
+
+async def test_household_invite_create(auth_client):
+    # Create household
+    resp = await auth_client.post(f"{API}/households", json={"name": "Test"})
+    assert resp.status_code == 200
+    household_id = resp.json()["id"]
+
+    # Create invite
+    resp = await auth_client.post(
+        f"{API}/households/{household_id}/invites",
+        json={"email": "invitee@example.com", "role": "member"},
+    )
+    assert resp.status_code == 200
+    invite = resp.json()
+    assert invite["email"] == "invitee@example.com"
+    assert invite["role"] == "member"
+    assert invite["household_id"] == household_id

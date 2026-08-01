@@ -25,3 +25,6 @@ class User(Base):
     transactions = relationship("Transaction", back_populates="user")
     budgets = relationship("Budget", back_populates="user")
     notifications = relationship("Notification", back_populates="user", order_by="Notification.created_at")
+    household_memberships = relationship("HouseholdMembership", back_populates="user")
+    household_invites = relationship("HouseholdInvite", back_populates="creator")
+    created_households = relationship("Household", foreign_keys="Household.created_by")

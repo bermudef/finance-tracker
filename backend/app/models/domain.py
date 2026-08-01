@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, Enum as SQLEnum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 
 from app.models.database import Base
@@ -104,3 +104,51 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="notifications")
+
+
+class Household(Base):
+    """A group of users sharing finances (e.g., family, partners)."""
+
+    __tablename__ = "households"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    creator = relationship("User")
+    members = relationship("HouseholdMembership", back_populates="household")
+
+
+class HouseholdMembership(Base):
+    """Link a user to a household with a role."""
+
+    __tablename__ = "household_memberships"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    role = Column(SQLEnum("owner", "admin", "member", name="household_role"), nullable=False, default="member")
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    household = relationship("Household", back_populates="members")
+    user = relationship("User")
+
+
+class HouseholdInvite(Base):
+    """Invitation to join a household."""
+
+    __tablename__ = "household_invites"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    role = Column(SQLEnum("admin", "member", name="invite_role"), nullable=False, default="member")
+    token = Column(String(64), nullable=False, unique=True, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    accepted_at = Column(DateTime, nullable=True)
+
+    household = relationship("Household")
+    creator = relationship("User")
