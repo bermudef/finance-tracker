@@ -1,3 +1,6 @@
+# Production-style topology: matches the Azure App Service layout
+# (nginx-served frontend proxying /api to the FastAPI container).
+# Run: cp .env.example .env && docker compose up --build
 services:
   postgres:
     image: postgres:17-alpine
@@ -27,22 +30,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
     build: ./frontend
     container_name: finance-frontend
-    environment:
-      VITE_API_URL: http://localhost:8000/api/v1
     ports:
-      - "5173:5173"
+      - "8080:80"
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-    command: npm run dev -- --host 0.0.0.0
 
 volumes:
   finance_pgdata:

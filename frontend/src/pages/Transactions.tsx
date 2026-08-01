@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, type Account, type Category, type Transaction } from "../api/client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  api,
+  exportTransactionsCsv,
+  importTransactionsCsv,
+  type Account,
+  type Category,
+  type Transaction,
+} from "../api/client";
 import { Badge, Card } from "../components/ui";
 import { formatCurrency, formatDate } from "../lib/format";
 
@@ -11,21 +18,60 @@ export default function TransactionsPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const load = () =>
+    api
+      .get<Transaction[]>("/transactions")
+      .then(setTransactions)
+      .catch((err) => console.error(err));
 
   useEffect(() => {
     Promise.all([
-      api.get<Transaction[]>("/transactions"),
-      api.get<Account[]>("/accounts"),
-      api.get<Category[]>("/categories"),
-    ])
-      .then(([txs, accs, cats]) => {
-        setTransactions(txs);
-        setAccounts(accs);
-        setCategories(cats);
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setLoading(false));
+      load(),
+      api.get<Account[]>("/accounts").then(setAccounts),
+      api.get<Category[]>("/categories").then(setCategories),
+    ]).finally(() => setLoading(false));
   }, []);
+
+  const handleExport = async () => {
+    try {
+      const blob = await exportTransactionsCsv();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      setImportMessage("Export failed — see console.");
+    }
+  };
+
+  const handleImportFile = async (file: File) => {
+    setImporting(true);
+    setImportMessage(null);
+    try {
+      const result = await importTransactionsCsv(file);
+      setImportMessage(
+        `Imported ${result.created} transaction${result.created === 1 ? "" : "s"}${
+          result.skipped
+            ? `, skipped ${result.skipped} row${result.skipped === 1 ? "" : "s"}: ${result.errors
+                .map((e) => `row ${e.row} (${e.error})`)
+                .join("; ")}`
+            : ""
+        }.`
+      );
+      await load();
+    } catch (err) {
+      setImportMessage(err instanceof Error ? err.message : "Import failed.");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
@@ -44,10 +90,44 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900">Transactions</h1>
-        <p className="text-sm text-slate-500">Search, filter, and review your activity</p>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Transactions</h1>
+          <p className="text-sm text-slate-500">Search, filter, and review your activity</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleImportFile(f);
+              e.target.value = ""; // allow re-selecting the same file
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {importing ? "Importing…" : "Import CSV"}
+          </button>
+          <button
+            onClick={handleExport}
+            className="rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+          >
+            Export CSV
+          </button>
+        </div>
       </header>
+
+      {importMessage && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {importMessage}
+        </div>
+      )}
 
       <Card className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <input

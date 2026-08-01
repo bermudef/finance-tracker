@@ -105,6 +105,42 @@ export const api = {
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
+export interface ImportResult {
+  created: number;
+  skipped: number;
+  errors: { row: number; error: string }[];
+}
+
+/** Download transactions as CSV (triggered by an <a download> after fetching). */
+export async function exportTransactionsCsv(): Promise<Blob> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}/transactions/export`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, `Export failed (${res.status})`);
+  return res.blob();
+}
+
+/** Upload a CSV file and return per-row import results. */
+export async function importTransactionsCsv(file: File): Promise<ImportResult> {
+  const token = getAccessToken();
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/transactions/import`, {
+    method: "POST",
+    body: form,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      typeof body?.detail === "string" ? body.detail : `Import failed (${res.status})`
+    );
+  }
+  return body as ImportResult;
+}
+
 // ---- typed domain models ----
 export interface User {
   id: number;
