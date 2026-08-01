@@ -449,7 +449,7 @@ function RetirementTool() {
                   type="monotone"
                   dataKey="p10"
                   name="P10"
-                  stroke="#64748b"
+                  stroke="#ef4444"
                   strokeWidth={1}
                   dot={false}
                   strokeDasharray="4 2"
