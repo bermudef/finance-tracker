@@ -419,7 +419,7 @@ function RetirementTool() {
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="age" tick={{ fontSize: 11 }} />
+                <XAxis dataKey="age" tick={{ fontSize: 11 }} label={{ value: "Age", position: "insideBottom", offset: -5, fontSize: 11, fill: "#94a3b8" }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v / 1000}k`} />
                 <Tooltip formatter={(v) => formatCurrency(Number(v))} />
                 <Legend />
@@ -428,7 +428,6 @@ function RetirementTool() {
                 <Area
                   type="monotone"
                   dataKey="p90"
-                  name="P90"
                   stroke="#10b981"
                   fill="#10b981"
                   fillOpacity={0.1}
@@ -438,7 +437,6 @@ function RetirementTool() {
                 <Area
                   type="monotone"
                   dataKey="p10"
-                  name="P10"
                   stroke="none"
                   fill="white"
                   fillOpacity={1}
