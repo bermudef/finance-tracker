@@ -148,6 +148,8 @@ async def get_dashboard(
     budget_rows = (
         await db.execute(select(Budget).where(Budget.user_id == user_id))
     ).scalars().all()
+    days_in_month = (next_month_start - month_start).days
+    days_elapsed = max((today - month_start).days + 1, 1)  # today counts as a day
     budgets = []
     for b in budget_rows:
         spent_query = select(func.coalesce(func.sum(-Transaction.amount), 0)).where(
@@ -163,14 +165,31 @@ async def get_dashboard(
         else:
             spent_query = spent_query.where(Transaction.category_id == b.category_id)
         spent = (await db.execute(spent_query)).scalar()
+        amount = float(b.amount)
+        # Project month-end spend from what's already been spent: if you've
+        # spent $60 of a $100 budget in the first 10 days, you're on pace to
+        # spend ~$180. That forward-looking signal drives the status badge.
+        projected = (
+            round(float(spent) / days_elapsed * days_in_month, 2)
+            if float(spent) > 0
+            else 0.0
+        )
+        if amount > 0 and projected >= amount:
+            status = "over"
+        elif amount > 0 and projected >= 0.75 * amount:
+            status = "at_risk"
+        else:
+            status = "on_track"
         budgets.append({
             "id": b.id,
             "name": b.name,
-            "amount": float(b.amount),
+            "amount": amount,
             "spent": round(float(spent), 2),
-            "progress_pct": round(float(spent) / float(b.amount) * 100, 1)
-            if float(b.amount) > 0
-            else 0.0,
+            "progress_pct": round(float(spent) / amount * 100, 1) if amount > 0 else 0.0,
+            "projected": projected,
+            "status": status,
+            "days_elapsed": days_elapsed,
+            "days_in_month": days_in_month,
         })
 
     # --- Wealth: investments, debt, net worth, savings goals ---

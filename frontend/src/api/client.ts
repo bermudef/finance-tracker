@@ -199,7 +199,16 @@ export interface DashboardData {
   };
   spending_by_category: Array<{ name: string; amount: number; color: string | null }>;
   monthly_series: Array<{ month: string; income: number; expense: number }>;
-  budgets: Array<Budget & { spent: number; progress_pct: number }>;
+  budgets: Array<
+    Budget & {
+      spent: number;
+      progress_pct: number;
+      projected: number;
+      status: "on_track" | "at_risk" | "over";
+      days_elapsed: number;
+      days_in_month: number;
+    }
+  >;
   net_worth: number;
   investments: {
     total_value: number;
@@ -231,6 +240,24 @@ export interface MonthlyReport {
   by_account: Array<{ id: number; name: string; income: number; expense: number; net: number }>;
   top_merchants: Array<{ merchant: string; amount: number }>;
   daily_series: Array<{ day: number; income: number; expense: number }>;
+}
+
+export interface DebtPayoffSimulation {
+  months_to_debt_free: number | null;
+  total_interest: number;
+  payoff_order: Array<{ name: string; months: number }>;
+  timeline: Array<{ month: number; remaining: number }>;
+  did_not_converge: boolean;
+}
+
+export interface DebtPayoffResult {
+  extra_monthly: number;
+  total_principal: number;
+  debt_count: number;
+  avalanche: DebtPayoffSimulation;
+  snowball: DebtPayoffSimulation;
+  interest_savings: number | null;
+  months_faster: number | null;
 }
 
 export interface CreditCard {

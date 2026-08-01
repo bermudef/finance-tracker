@@ -145,6 +145,52 @@ async def test_budget_spent_tracking(auth_client):
     assert budget["spent"] == 150.0
     assert budget["progress_pct"] == 50.0
 
+    # Projected spend and status derive from today's date — mirror the formula.
+    days_in_month = budget["days_in_month"]
+    days_elapsed = budget["days_elapsed"]
+    projected = round(150.0 / days_elapsed * days_in_month, 2)
+    assert budget["projected"] == projected
+    expected_status = (
+        "over" if projected >= 300.0 else ("at_risk" if projected >= 225.0 else "on_track")
+    )
+    assert budget["status"] == expected_status
+
+
+async def test_budget_status_flags_over_budget(auth_client):
+    """Spending 120% of the budget is always 'over', regardless of the date."""
+    _, category_ids = await _seed(
+        auth_client,
+        balances={"Checking": 0},
+        transactions=[
+            {"account": "Checking", "category": "Groceries", "date": TODAY, "amount": -120,
+             "description": "Groceries"},
+        ],
+    )
+    await auth_client.post(
+        f"{API}/budgets",
+        json={"name": "Tight", "category_id": category_ids["Groceries"], "amount": 100},
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    budget = body["budgets"][0]
+    assert budget["spent"] == 120.0
+    assert budget["progress_pct"] == 120.0
+    assert budget["status"] == "over"
+
+
+async def test_budget_status_guards_zero_amount(auth_client):
+    """A $0 budget with any spending is over; with none it's on track."""
+    _, category_ids = await _seed(
+        auth_client,
+        balances={"Checking": 0},
+        transactions=[],
+    )
+    await auth_client.post(
+        f"{API}/budgets",
+        json={"name": "Zero", "category_id": category_ids["Groceries"], "amount": 0},
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert body["budgets"][0]["status"] == "on_track"
+
 
 async def test_general_budget_tracks_all_expenses(auth_client):
     """A budget without a category is general: it sums every expense this month,

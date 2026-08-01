@@ -34,6 +34,9 @@ export default function DashboardPage() {
   if (error) return <p className="text-sm text-red-600">Failed to load: {error}</p>;
   if (!data) return null;
 
+  const atRiskCount = data.budgets.filter((b) => b.status === "at_risk").length;
+  const overCount = data.budgets.filter((b) => b.status === "over").length;
+
   return (
     <div className="space-y-6">
       <header>
@@ -182,18 +185,33 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">Budgets</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-700">Budgets</h2>
+            {atRiskCount > 0 && (
+              <Badge tone={overCount > 0 ? "red" : "amber"}>
+                {overCount > 0
+                  ? `${overCount} over budget`
+                  : `${atRiskCount} at risk`}
+              </Badge>
+            )}
+          </div>
           <ul className="divide-y divide-slate-100">
             {data.budgets.map((b) => {
               const pct = b.amount > 0 ? (b.spent / b.amount) * 100 : 0;
               const over = pct > 100;
+              const tone = b.status === "over" ? "red" : b.status === "at_risk" ? "amber" : "green";
+              const label =
+                b.status === "over" ? "Over budget" : b.status === "at_risk" ? "At risk" : "On track";
               return (
                 <li key={b.id} className="py-2.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium text-slate-800">{b.name}</p>
-                    <p className="text-xs tabular-nums text-slate-500">
-                      {formatCurrency(b.spent)} / {formatCurrency(b.amount)}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs tabular-nums text-slate-500">
+                        {formatCurrency(b.spent)} / {formatCurrency(b.amount)}
+                      </span>
+                      <Badge tone={tone}>{label}</Badge>
+                    </div>
                   </div>
                   <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
                     <div
@@ -201,7 +219,26 @@ export default function DashboardPage() {
                       style={{ width: `${Math.min(pct, 100)}%` }}
                     />
                   </div>
-                  {over && <Badge tone="red">Over budget</Badge>}
+                  {b.status !== "on_track" && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      On pace to spend{" "}
+                      <span className="font-medium tabular-nums">
+                        {formatCurrency(b.projected)}
+                      </span>{" "}
+                      this month
+                      {b.status === "over" &&
+                        b.amount > 0 &&
+                        b.projected > b.amount && (
+                          <>
+                            {" "}
+                            —{" "}
+                            <span className="font-medium text-red-600">
+                              {formatCurrency(b.projected - b.amount)} over
+                            </span>
+                          </>
+                        )}
+                    </p>
+                  )}
                 </li>
               );
             })}

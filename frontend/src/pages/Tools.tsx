@@ -1,6 +1,21 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  api,
+  type Debt,
+  type DebtPayoffResult,
+} from "../api/client";
 import { Badge, Card, StatCard } from "../components/ui";
 import { formatCurrency } from "../lib/format";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const DEFAULT_INPUTS = {
   annualIncome: 120000,
@@ -95,6 +110,171 @@ function NumberField({
   );
 }
 
+function StrategySummary({ sim, title, tone }: { sim: DebtPayoffResult["avalanche"]; title: string; tone: "emerald" | "blue" }) {
+  const months = sim.months_to_debt_free;
+  const years = months ? Math.floor(months / 12) : 0;
+  const rem = months ? months % 12 : 0;
+  return (
+    <div className={`rounded-lg border p-4 ${tone === "emerald" ? "border-emerald-200 bg-emerald-50/50" : "border-blue-200 bg-blue-50/50"}`}>
+      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      <p className="mt-2 text-xs text-slate-500">Debt-free in</p>
+      <p className="text-xl font-semibold tabular-nums text-slate-900">
+        {months == null ? "—" : `${years}y ${rem}m`}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">Total interest</p>
+      <p className="text-xl font-semibold tabular-nums text-slate-900">
+        {formatCurrency(sim.total_interest)}
+      </p>
+      <ol className="mt-3 space-y-1">
+        {sim.payoff_order.map((p) => (
+          <li key={p.name} className="flex items-center justify-between text-xs">
+            <span className="truncate text-slate-600">{p.name}</span>
+            <span className="ml-2 shrink-0 tabular-nums text-slate-400">
+              month {p.months}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function DebtPayoffTool() {
+  const [debts, setDebts] = useState<Debt[] | null>(null);
+  const [extra, setExtra] = useState(200);
+  const [result, setResult] = useState<DebtPayoffResult | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Merged timeline for the chart, keyed by month so both strategies line up.
+  const chartData = useMemo(() => {
+    if (!result) return [];
+    const map = new Map<number, { month: number; avalanche: number; snowball: number }>();
+    for (const pt of result.avalanche.timeline) {
+      const row = map.get(pt.month) ?? { month: pt.month, avalanche: 0, snowball: 0 };
+      row.avalanche = pt.remaining;
+      map.set(pt.month, row);
+    }
+    for (const pt of result.snowball.timeline) {
+      const row = map.get(pt.month) ?? { month: pt.month, avalanche: 0, snowball: 0 };
+      row.snowball = pt.remaining;
+      map.set(pt.month, row);
+    }
+    return Array.from(map.values()).sort((a, b) => a.month - b.month);
+  }, [result]);
+
+  useEffect(() => {
+    api
+      .get<Debt[]>("/debts")
+      .then((d) => setDebts(d.filter((x) => x.is_active && x.principal > 0)))
+      .catch((err) => console.error(err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!debts || debts.length === 0) return;
+    api
+      .post<DebtPayoffResult>("/tools/debt-payoff", { extra_monthly: extra })
+      .then(setResult)
+      .catch((err) => console.error(err));
+  }, [debts, extra]);
+
+  if (loading) return <p className="text-sm text-slate-500">Loading debts…</p>;
+
+  if (debts && debts.length === 0) {
+    return (
+      <Card>
+        <h2 className="text-base font-semibold text-slate-900">Debt payoff optimizer</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Compare avalanche (highest APR first) vs. snowball (smallest balance
+          first) with your real debts.
+        </p>
+        <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+          No active debts yet —{" "}
+          <a href="/debts" className="font-medium text-emerald-700 hover:underline">
+            add your debts
+          </a>{" "}
+          to see the comparison.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Debt payoff optimizer</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {result?.debt_count ?? 0} debts · {formatCurrency(result?.total_principal ?? 0)} total
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          Extra payment
+          <input
+            type="number"
+            min={0}
+            value={extra}
+            onChange={(e) => setExtra(Math.max(0, Number(e.target.value) || 0))}
+            className="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:border-emerald-500 focus:outline-none"
+          />
+          <span className="text-xs text-slate-400">/mo</span>
+        </label>
+      </div>
+
+      {result && (
+        <>
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StrategySummary sim={result.avalanche} title="Avalanche" tone="emerald" />
+            <StrategySummary sim={result.snowball} title="Snowball" tone="blue" />
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-800">Winner</p>
+              {result.interest_savings == null || result.interest_savings <= 0 ? (
+                <>
+                  <p className="mt-2 text-xl font-semibold text-slate-900">Dead heat</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Both strategies cost the same. Pick whichever keeps you motivated.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 text-xl font-semibold text-emerald-700">
+                    Avalanche saves {formatCurrency(result.interest_savings)}
+                  </p>
+                  {result.months_faster ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      and reaches debt-free{" "}
+                      {Math.floor(result.months_faster / 12)}y {result.months_faster % 12}m sooner.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Snowball stays motivated with faster early wins.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-semibold text-slate-700">Remaining debt over time</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v / 1000}k`} />
+                <Tooltip formatter={(v) => formatCurrency(Number(v))} />
+                <Legend />
+                <Line type="monotone" dataKey="avalanche" name="Avalanche" stroke="#10b981" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="snowball" name="Snowball" stroke="#3b82f6" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export default function ToolsPage() {
   const [inputs, setInputs] = useState<Inputs>(DEFAULT_INPUTS);
   const result = useMemo(() => compute(inputs), [inputs]);
@@ -108,6 +288,8 @@ export default function ToolsPage() {
         <h1 className="text-2xl font-bold text-slate-900">Financial Tools</h1>
         <p className="text-sm text-slate-500">Calculators to help you plan big decisions</p>
       </header>
+
+      <DebtPayoffTool />
 
       <Card>
         <h2 className="text-base font-semibold text-slate-900">How much house can I afford?</h2>
@@ -201,13 +383,6 @@ export default function ToolsPage() {
       </Card>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <Card>
-          <h2 className="text-base font-semibold text-slate-900">Debt payoff optimizer</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Avalanche vs. snowball comparison using your actual debts.
-          </p>
-          <Badge tone="blue" >Coming soon</Badge>
-        </Card>
         <Card>
           <h2 className="text-base font-semibold text-slate-900">Retirement projection</h2>
           <p className="mt-1 text-sm text-slate-500">
