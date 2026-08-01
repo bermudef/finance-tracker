@@ -227,6 +227,16 @@ export interface DashboardData {
     progress_pct: number;
     target_date: string | null;
   }>;
+  upcoming_bills: Array<{
+    id: number;
+    name: string;
+    amount: number;
+    frequency: string;
+    auto_pay: boolean;
+    next_due_date: string;
+    days_until: number;
+  }>;
+  health: { score: number; grade: "Excellent" | "Good" | "Fair" | "Needs work" };
 }
 
 export interface MonthlyReport {

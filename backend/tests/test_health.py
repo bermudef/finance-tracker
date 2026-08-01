@@ -143,7 +143,15 @@ def test_grade_bands():
 # ---------- endpoint integration tests ----------
 
 async def _seed_scenario(client):
-    """Create a small but realistic data set."""
+    """Create a small but realistic data set.
+
+    Dates are derived from date.today() so the fixtures always land inside the
+    month the health endpoint is measuring (regardless of when the suite runs):
+    salary on the 1st, groceries today.
+    """
+    from datetime import date
+
+    today = date.today()
     await client.post(
         f"{API}/categories", json={"name": "Salary", "type": "income"}
     )
@@ -166,7 +174,7 @@ async def _seed_scenario(client):
         json={
             "account_id": checking,
             "category_id": salary["id"],
-            "date": "2026-07-01",
+            "date": today.replace(day=1).isoformat(),
             "amount": 8000,
             "description": "Salary",
         },
@@ -176,7 +184,7 @@ async def _seed_scenario(client):
         json={
             "account_id": checking,
             "category_id": groceries["id"],
-            "date": "2026-07-05",
+            "date": today.isoformat(),
             "amount": -400,
             "description": "Groceries",
         },

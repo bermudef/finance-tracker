@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Area,
   AreaChart,
@@ -50,6 +51,32 @@ export default function DashboardPage() {
         <StatCard label="Income (this month)" value={data.monthly.income} sub="vs. last month" />
         <StatCard label="Expenses (this month)" value={-data.monthly.expense} />
       </div>
+
+      <Link
+        to="/health"
+        className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50/40"
+      >
+        <div className="flex items-center gap-4">
+          <div
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white"
+            style={{
+              background: `conic-gradient(#10b981 ${data.health.score * 3.6}deg, #e2e8f0 0deg)`,
+              color: data.health.score >= 40 ? "white" : "#0f172a",
+            }}
+          >
+            {data.health.score}
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Financial Health</p>
+            <p className="text-xs text-slate-500">
+              {data.health.grade} — six weighted signals of your money health
+            </p>
+          </div>
+        </div>
+        <span className="shrink-0 text-sm font-medium text-emerald-700">
+          View details →
+        </span>
+      </Link>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card>
@@ -163,9 +190,11 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card>
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">Accounts</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-700">Accounts</h2>
+          </div>
           <ul className="divide-y divide-slate-100">
             {data.accounts.map((a) => (
               <li key={a.id} className="flex items-center justify-between py-2.5">
@@ -246,6 +275,53 @@ export default function DashboardPage() {
               <li className="py-2.5 text-sm text-slate-400">No budgets yet.</li>
             )}
           </ul>
+        </Card>
+
+        <Card>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-700">Upcoming bills</h2>
+            <span className="text-xs text-slate-400">next 30 days</span>
+          </div>
+          {data.upcoming_bills.length === 0 ? (
+            <p className="text-sm text-slate-400">Nothing due in the next 30 days.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {data.upcoming_bills.map((b) => {
+                const soon = b.days_until <= 3;
+                return (
+                  <li key={b.id} className="flex items-center justify-between gap-2 py-2.5">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 truncate text-sm font-medium text-slate-800">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${soon ? "bg-red-500" : "bg-slate-300"}`} />
+                        {b.name}
+                        {b.auto_pay && (
+                          <span className="rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                            auto
+                          </span>
+                        )}
+                      </p>
+                      <p className="mt-0.5 text-xs tabular-nums text-slate-400">
+                        {b.next_due_date}
+                        {b.frequency !== "one-time" && ` · ${b.frequency}`}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-semibold tabular-nums text-slate-900">
+                        {formatCurrency(b.amount)}
+                      </p>
+                      <p className={`text-xs font-medium ${soon ? "text-red-500" : "text-slate-400"}`}>
+                        {b.days_until === 0
+                          ? "due today"
+                          : b.days_until === 1
+                            ? "due tomorrow"
+                            : `in ${b.days_until} days`}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Card>
       </div>
     </div>

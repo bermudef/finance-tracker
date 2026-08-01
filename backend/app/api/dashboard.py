@@ -7,10 +7,13 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.api.health import gather_health_metrics
 from app.models.database import get_db
 from app.models.domain import Bill, CreditCard, Debt, Investment, SavingsGoal
 from app.models.finance import Account, Budget, Category, Transaction
 from app.models.user import User
+from app.services.bills import upcoming_bills
+from app.services.health_score import compute_health_score
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -243,6 +246,16 @@ async def get_dashboard(
             "target_date": g.target_date.isoformat() if g.target_date else None,
         })
 
+    # --- Upcoming bills (next occurrence of each recurring bill) ---
+    bill_rows = (
+        await db.execute(select(Bill).where(Bill.user_id == user_id, Bill.is_active.is_(True)))
+    ).scalars().all()
+    upcoming = upcoming_bills(bill_rows, today)
+
+    # --- Health summary (reuses the health-score metrics) ---
+    metrics = await gather_health_metrics(db, user_id)
+    health = compute_health_score(metrics)
+
     return {
         "total_balance": round(total_balance, 2),
         "accounts": accounts,
@@ -267,4 +280,6 @@ async def get_dashboard(
             "by_type": dict(sorted(debt_by_type.items(), key=lambda kv: -kv[1])),
         },
         "savings_goals": savings_goals,
+        "upcoming_bills": upcoming,
+        "health": {"score": health["score"], "grade": health["grade"]},
     }

@@ -50,6 +50,28 @@ async def test_empty_dashboard(auth_client):
     assert body["monthly"]["expense"] == 0.0
     assert body["spending_by_category"] == []
     assert len(body["monthly_series"]) == 6
+    assert body["upcoming_bills"] == []
+    assert body["health"]["grade"] in {"Excellent", "Good", "Fair", "Needs work"}
+    assert 0 <= body["health"]["score"] <= 100
+
+
+async def test_dashboard_upcoming_bills(auth_client):
+    """Bills roll to their next occurrence and surface on the dashboard."""
+    await auth_client.post(
+        f"{API}/bills",
+        json={"name": "Netflix", "amount": 15.99, "due_date": (TODAY - timedelta(days=20)).isoformat(), "frequency": "monthly", "auto_pay": True},
+    )
+    await auth_client.post(
+        f"{API}/bills",
+        json={"name": "Rent", "amount": 1850.00, "due_date": (TODAY + timedelta(days=2)).isoformat(), "frequency": "monthly", "auto_pay": False},
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    upcoming = body["upcoming_bills"]
+    # Netflix rolled forward to ~10 days out; Rent is 2 days out and first.
+    assert [b["name"] for b in upcoming] == ["Rent", "Netflix"]
+    assert upcoming[0]["days_until"] == 2
+    assert upcoming[0]["amount"] == 1850.0
+    assert upcoming[1]["next_due_date"] > (TODAY - timedelta(days=20)).isoformat()
 
 
 async def test_balances_include_opening_and_transactions(auth_client):

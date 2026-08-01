@@ -40,12 +40,12 @@ async def _sum_transactions(
     return float((await db.execute(query)).scalar() or 0)
 
 
-@router.get("")
-async def get_health_score(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    user_id = current_user.id
+async def gather_health_metrics(db: AsyncSession, user_id: int) -> dict:
+    """Collect every raw signal the health score needs for `user_id`.
+
+    Exported so the dashboard can show a health summary without duplicating
+    the query logic.
+    """
     today = date.today()
     month_start = today.replace(day=1)
     next_month_start = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
@@ -136,20 +136,27 @@ async def get_health_score(
             goal_progresses.append(current / target)
     goals_avg_progress = sum(goal_progresses) / len(goal_progresses) if goal_progresses else None
 
-    return compute_health_score(
-        {
-            "monthly_income": round(income_this_month, 2),
-            "monthly_expense": round(expense_this_month, 2),
-            "avg_monthly_expense": round(avg_monthly_expense, 2),
-            "liquid_assets": round(liquid_assets, 2),
-            "monthly_debt_payments": round(monthly_debt_payments, 2),
-            "budget_statuses": statuses,
-            "credit_balance": round(credit_balance, 2),
-            "credit_limit": round(credit_limit, 2),
-            "credit_cards_count": len(card_rows),
-            "goals_avg_progress": goals_avg_progress,
-            "goals_count": len(goal_rows),
-            "as_of": today.isoformat(),
-            "period_label": month_start.strftime("%B %Y"),
-        }
-    )
+    return {
+        "monthly_income": round(income_this_month, 2),
+        "monthly_expense": round(expense_this_month, 2),
+        "avg_monthly_expense": round(avg_monthly_expense, 2),
+        "liquid_assets": round(liquid_assets, 2),
+        "monthly_debt_payments": round(monthly_debt_payments, 2),
+        "budget_statuses": statuses,
+        "credit_balance": round(credit_balance, 2),
+        "credit_limit": round(credit_limit, 2),
+        "credit_cards_count": len(card_rows),
+        "goals_avg_progress": goals_avg_progress,
+        "goals_count": len(goal_rows),
+        "as_of": today.isoformat(),
+        "period_label": month_start.strftime("%B %Y"),
+    }
+
+
+@router.get("")
+async def get_health_score(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    metrics = await gather_health_metrics(db, current_user.id)
+    return compute_health_score(metrics)
