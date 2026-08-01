@@ -346,3 +346,25 @@ export interface Bill {
   is_active: boolean;
   notes: string | null;
 }
+
+export interface RetirementProjectionPoint {
+  age: number;
+  p10: number;
+  p25: number;
+  median: number;
+  p75: number;
+  p90: number;
+}
+
+export interface RetirementProjectionSummary {
+  median_nominal: number;
+  median_real: number;
+  p10_nominal: number;
+  p90_nominal: number;
+}
+
+export interface RetirementProjectionResult {
+  years_to_retirement: number;
+  series: RetirementProjectionPoint[];
+  summary: RetirementProjectionSummary;
+}

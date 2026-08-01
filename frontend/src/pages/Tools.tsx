@@ -3,10 +3,13 @@ import {
   api,
   type Debt,
   type DebtPayoffResult,
+  type RetirementProjectionResult,
 } from "../api/client";
 import { Badge, Card, StatCard } from "../components/ui";
 import { formatCurrency } from "../lib/format";
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
   Legend,
   Line,
@@ -275,6 +278,212 @@ function DebtPayoffTool() {
   );
 }
 
+function RetirementTool() {
+  const [inputs, setInputs] = useState({
+    currentAge: 30,
+    retirementAge: 65,
+    currentBalance: 50000,
+    monthlyContribution: 1000,
+    expectedReturn: 7.0,
+    inflationRate: 2.5,
+    stdDev: 12.0,
+  });
+  const [result, setResult] = useState<RetirementProjectionResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    timer = setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      api
+        .post<RetirementProjectionResult>("/tools/retirement-projection", inputs)
+        .then(setResult)
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [inputs]);
+
+  const set = (key: keyof typeof inputs) => (v: number) =>
+    setInputs((prev) => ({ ...prev, [key]: v }));
+
+  const chartData = useMemo(() => result?.series ?? [], [result]);
+
+  return (
+    <Card>
+      <h2 className="text-base font-semibold text-slate-900">
+        Retirement projection
+      </h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Monte Carlo simulation (2,000 paths) showing the distribution of your
+        retirement balance at each age.
+      </p>
+
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Current age</span>
+          <input
+            type="number"
+            min={18}
+            max={100}
+            value={inputs.currentAge}
+            onChange={(e) => set("currentAge")(Number(e.target.value) || 0)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:border-emerald-500 focus:outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Retirement age</span>
+          <input
+            type="number"
+            min={18}
+            max={100}
+            value={inputs.retirementAge}
+            onChange={(e) => set("retirementAge")(Number(e.target.value) || 0)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:border-emerald-500 focus:outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Current balance ($)</span>
+          <input
+            type="number"
+            min={0}
+            step={1000}
+            value={inputs.currentBalance}
+            onChange={(e) => set("currentBalance")(Number(e.target.value) || 0)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:border-emerald-500 focus:outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Monthly contribution ($)</span>
+          <input
+            type="number"
+            min={0}
+            step={100}
+            value={inputs.monthlyContribution}
+            onChange={(e) => set("monthlyContribution")(Number(e.target.value) || 0)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:border-emerald-500 focus:outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Expected return (%)</span>
+          <input
+            type="number"
+            step={0.1}
+            value={inputs.expectedReturn}
+            onChange={(e) => set("expectedReturn")(Number(e.target.value) || 0)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:border-emerald-500 focus:outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Inflation rate (%)</span>
+          <input
+            type="number"
+            step={0.1}
+            value={inputs.inflationRate}
+            onChange={(e) => set("inflationRate")(Number(e.target.value) || 0)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:border-emerald-500 focus:outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-500">Annual volatility (%)</span>
+          <input
+            type="number"
+            step={0.1}
+            value={inputs.stdDev}
+            onChange={(e) => set("stdDev")(Number(e.target.value) || 0)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:border-emerald-500 focus:outline-none"
+          />
+        </label>
+      </div>
+
+      {loading && <p className="mt-4 text-sm text-slate-400">Running simulation…</p>}
+      {error && (
+        <p className="mt-4 text-sm text-red-600">Simulation failed: {error}</p>
+      )}
+
+      {result && !loading && (
+        <>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Years to retirement" value={result.years_to_retirement} />
+            <StatCard label="Median balance (nominal)" value={result.summary.median_nominal} />
+            <StatCard label="P10 (conservative)" value={result.summary.p10_nominal} />
+            <StatCard label="P90 (optimistic)" value={result.summary.p90_nominal} />
+          </div>
+
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-semibold text-slate-700">
+              Balance distribution by age
+            </h3>
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.15} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="age" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v / 1000}k`} />
+                <Tooltip formatter={(v) => formatCurrency(Number(v))} />
+                <Legend />
+                <Area
+                  type="monotone"
+                  dataKey="p90"
+                  name="P90"
+                  stroke="#10b981"
+                  fill="url(#band)"
+                  strokeWidth={1}
+                  dot={false}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="p75"
+                  name="P75"
+                  stroke="#10b981"
+                  fill="transparent"
+                  strokeWidth={1}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="median"
+                  name="Median"
+                  stroke="#10b981"
+                  strokeWidth={2.5}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="p25"
+                  name="P25"
+                  stroke="#10b981"
+                  fill="transparent"
+                  strokeWidth={1}
+                  dot={false}
+                  strokeDasharray="4 2"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="p10"
+                  name="P10"
+                  stroke="#10b981"
+                  fill="transparent"
+                  strokeWidth={1}
+                  dot={false}
+                  strokeDasharray="4 2"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export default function ToolsPage() {
   const [inputs, setInputs] = useState<Inputs>(DEFAULT_INPUTS);
   const result = useMemo(() => compute(inputs), [inputs]);
@@ -290,6 +499,8 @@ export default function ToolsPage() {
       </header>
 
       <DebtPayoffTool />
+
+      <RetirementTool />
 
       <Card>
         <h2 className="text-base font-semibold text-slate-900">How much house can I afford?</h2>
@@ -380,17 +591,7 @@ export default function ToolsPage() {
             )}
           </div>
         )}
-      </Card>
-
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <Card>
-          <h2 className="text-base font-semibold text-slate-900">Retirement projection</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Monte Carlo projection toward your retirement goal.
-          </p>
-          <Badge tone="blue">Coming soon</Badge>
-        </Card>
-      </div>
-    </div>
-  );
+       </Card>
+     </div>
+   );
 }

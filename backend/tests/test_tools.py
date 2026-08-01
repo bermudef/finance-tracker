@@ -162,3 +162,76 @@ async def test_debt_payoff_full_simulation(auth_client):
     # Extra monthly payment is clamped to non-negative.
     bad = await auth_client.post(f"{API}/tools/debt-payoff", json={"extra_monthly": -5})
     assert bad.status_code == 422
+
+
+# ---- retirement projection tests ----
+
+
+async def test_retirement_projection_requires_auth(client):
+    resp = await client.post(f"{API}/tools/retirement-projection", json={
+        "current_age": 30, "retirement_age": 65,
+    })
+    assert resp.status_code == 401
+
+
+async def test_retirement_projection_structure(auth_client):
+    resp = await auth_client.post(f"{API}/tools/retirement-projection", json={
+        "current_age": 30,
+        "retirement_age": 65,
+        "current_balance": 50000,
+        "monthly_contribution": 1000,
+        "expected_return": 7.0,
+        "inflation_rate": 2.5,
+        "std_dev": 12.0,
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["years_to_retirement"] == 35
+    assert len(body["series"]) == 35
+    assert "summary" in body
+    first = body["series"][0]
+    assert {"age", "p10", "p25", "median", "p75", "p90"} <= set(first.keys())
+    # Percentile ordering must hold at every year.
+    for pt in body["series"]:
+        assert pt["p10"] <= pt["p25"] <= pt["median"] <= pt["p75"] <= pt["p90"]
+
+
+async def test_retirement_projection_is_deterministic(auth_client):
+    """Identical inputs must produce identical outputs (deterministic seed)."""
+    body1 = (await auth_client.post(
+        f"{API}/tools/retirement-projection",
+        json={"current_age": 30, "retirement_age": 65, "current_balance": 50000,
+              "monthly_contribution": 1000, "expected_return": 7.0,
+              "inflation_rate": 2.5, "std_dev": 12.0},
+    )).json()
+    body2 = (await auth_client.post(
+        f"{API}/tools/retirement-projection",
+        json={"current_age": 30, "retirement_age": 65, "current_balance": 50000,
+              "monthly_contribution": 1000, "expected_return": 7.0,
+              "inflation_rate": 2.5, "std_dev": 12.0},
+    )).json()
+    assert body1["series"] == body2["series"]
+
+
+async def test_retirement_projection_zero_years(auth_client):
+    resp = await auth_client.post(f"{API}/tools/retirement-projection", json={
+        "current_age": 65, "retirement_age": 65, "current_balance": 100000,
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["years_to_retirement"] == 0
+    assert body["series"] == []
+    assert body["summary"]["median_nominal"] == 100000.0
+
+
+async def test_retirement_projection_input_validation(auth_client):
+    # current_age below minimum
+    bad = await auth_client.post(f"{API}/tools/retirement-projection", json={
+        "current_age": 17, "retirement_age": 65,
+    })
+    assert bad.status_code == 422
+    # retirement_age below minimum
+    bad = await auth_client.post(f"{API}/tools/retirement-projection", json={
+        "current_age": 30, "retirement_age": 17,
+    })
+    assert bad.status_code == 422
