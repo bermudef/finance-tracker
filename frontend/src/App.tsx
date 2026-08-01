@@ -21,6 +21,7 @@ const SavingsGoalsPage = lazy(() => import("./pages/SavingsGoals"));
 const BillsPage = lazy(() => import("./pages/Bills"));
 const StatementsPage = lazy(() => import("./pages/Statements"));
 const ToolsPage = lazy(() => import("./pages/Tools"));
+const HealthPage = lazy(() => import("./pages/Health"));
 
 function PageFallback() {
   return <p className="p-8 text-sm text-slate-500">Loading…</p>;
@@ -87,6 +88,7 @@ export default function App() {
               }
             >
               <Route index element={<DashboardPage />} />
+              <Route path="health" element={<HealthPage />} />
               <Route path="transactions" element={<TransactionsPage />} />
               <Route path="budgets" element={<BudgetsPage />} />
               <Route path="accounts" element={<AccountsPage />} />

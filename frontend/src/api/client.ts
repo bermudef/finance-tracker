@@ -242,6 +242,28 @@ export interface MonthlyReport {
   daily_series: Array<{ day: number; income: number; expense: number }>;
 }
 
+export interface HealthSubscore {
+  key: string;
+  label: string;
+  score: number;
+  weight: number;
+  detail: string;
+}
+
+export interface HealthRecommendation {
+  key: string;
+  text: string;
+}
+
+export interface HealthScore {
+  score: number;
+  grade: "Excellent" | "Good" | "Fair" | "Needs work";
+  as_of: string;
+  period_label: string;
+  subscores: HealthSubscore[];
+  recommendations: HealthRecommendation[];
+}
+
 export interface DebtPayoffSimulation {
   months_to_debt_free: number | null;
   total_interest: number;
