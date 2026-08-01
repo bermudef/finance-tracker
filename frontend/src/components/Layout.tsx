@@ -10,6 +10,8 @@ const navItems = [
   { to: "/investments", label: "Investments" },
   { to: "/savings-goals", label: "Savings Goals" },
   { to: "/bills", label: "Bills" },
+  { to: "/statements", label: "Statements" },
+  { to: "/tools", label: "Tools" },
   { to: "/budgets", label: "Budgets" },
   { to: "/categories", label: "Categories" },
 ];

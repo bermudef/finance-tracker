@@ -31,7 +31,7 @@ async def _seed(auth_client, balances, transactions):
             f"{API}/transactions",
             json={
                 "account_id": account_ids[txn["account"]],
-                "category_id": category_ids[txn["category"]],
+                "category_id": category_ids[txn["category"]] if txn.get("category") else None,
                 "date": txn["date"].isoformat(),
                 "amount": txn["amount"],
                 "description": txn["description"],
@@ -143,6 +143,30 @@ async def test_budget_spent_tracking(auth_client):
     budget = body["budgets"][0]
     assert budget["amount"] == 300.0
     assert budget["spent"] == 150.0
+    assert budget["progress_pct"] == 50.0
+
+
+async def test_general_budget_tracks_all_expenses(auth_client):
+    """A budget without a category is general: it sums every expense this month,
+    including categorized ones (not just uncategorized)."""
+    _, category_ids = await _seed(
+        auth_client,
+        balances={"Checking": 0},
+        transactions=[
+            {"account": "Checking", "category": "Groceries", "date": TODAY, "amount": -150,
+             "description": "Categorized expense"},
+            {"account": "Checking", "date": TODAY, "amount": -50,
+             "description": "Uncategorized expense"},
+        ],
+    )
+    await auth_client.post(
+        f"{API}/budgets",
+        json={"name": "General", "amount": 500},
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    general = next(b for b in body["budgets"] if b["name"] == "General")
+    assert general["spent"] == 200.0
+    assert general["progress_pct"] == 40.0
 
 
 async def test_dashboard_isolated_between_users(auth_client, second_user_headers):

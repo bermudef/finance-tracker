@@ -19,6 +19,7 @@ from app.api import (
     investments,
     savings_goals,
     bills,
+    reports,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ app.include_router(categories.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 app.include_router(budgets.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(reports.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

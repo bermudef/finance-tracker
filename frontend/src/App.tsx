@@ -19,6 +19,8 @@ const DebtsPage = lazy(() => import("./pages/Debts"));
 const InvestmentsPage = lazy(() => import("./pages/Investments"));
 const SavingsGoalsPage = lazy(() => import("./pages/SavingsGoals"));
 const BillsPage = lazy(() => import("./pages/Bills"));
+const StatementsPage = lazy(() => import("./pages/Statements"));
+const ToolsPage = lazy(() => import("./pages/Tools"));
 
 function PageFallback() {
   return <p className="p-8 text-sm text-slate-500">Loading…</p>;
@@ -94,6 +96,8 @@ export default function App() {
               <Route path="investments" element={<InvestmentsPage />} />
               <Route path="savings-goals" element={<SavingsGoalsPage />} />
               <Route path="bills" element={<BillsPage />} />
+              <Route path="statements" element={<StatementsPage />} />
+              <Route path="tools" element={<ToolsPage />} />
             </Route>
           </Routes>
         </Suspense>

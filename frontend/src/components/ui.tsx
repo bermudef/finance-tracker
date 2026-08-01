@@ -14,11 +14,15 @@ export function StatCard({
   value,
   sub,
   positive = true,
+  isPercent = false,
+  children,
 }: {
   label: string;
   value: number;
   sub?: string;
   positive?: boolean;
+  isPercent?: boolean;
+  children?: ReactNode;
 }) {
   const color = value < 0 ? "text-red-600" : positive ? "text-slate-900" : "text-slate-900";
   return (
@@ -26,8 +30,10 @@ export function StatCard({
       <p className="text-sm font-medium text-slate-500">{label}</p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${color}`}>
         {formatCurrency(value)}
+        {isPercent && <span className="ml-0.5 text-base font-medium text-slate-500">%</span>}
       </p>
       {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
+      {children}
     </Card>
   );
 }

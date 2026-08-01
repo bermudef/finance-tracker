@@ -199,7 +199,7 @@ export interface DashboardData {
   };
   spending_by_category: Array<{ name: string; amount: number; color: string | null }>;
   monthly_series: Array<{ month: string; income: number; expense: number }>;
-  budgets: Array<Budget & { spent: number }>;
+  budgets: Array<Budget & { spent: number; progress_pct: number }>;
   net_worth: number;
   investments: {
     total_value: number;
@@ -218,6 +218,19 @@ export interface DashboardData {
     progress_pct: number;
     target_date: string | null;
   }>;
+}
+
+export interface MonthlyReport {
+  year: number;
+  month: number;
+  income: number;
+  expense: number;
+  net: number;
+  previous: { income: number; expense: number };
+  by_category: Array<{ name: string; amount: number; pct: number }>;
+  by_account: Array<{ id: number; name: string; income: number; expense: number; net: number }>;
+  top_merchants: Array<{ merchant: string; amount: number }>;
+  daily_series: Array<{ day: number; income: number; expense: number }>;
 }
 
 export interface CreditCard {

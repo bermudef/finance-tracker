@@ -23,6 +23,7 @@ async def get_dashboard(
     user_id = current_user.id
     today = date.today()
     month_start = today.replace(day=1)
+    next_month_start = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
     last_month_start = (month_start - timedelta(days=1)).replace(day=1)
 
     balance_rows = (
@@ -111,8 +112,13 @@ async def get_dashboard(
 
     last_6_months = []
     for i in range(5, -1, -1):
-        first = month_start.replace(month=month_start.month - i, day=1)
-        nxt = (first + timedelta(days=32)).replace(day=1)
+        # date.replace(month=x) breaks when x <= 0 (e.g. January minus 5 months),
+        # so compute month/year arithmetically instead.
+        offset = month_start.month - 1 - i
+        year = month_start.year + offset // 12
+        month_num = offset % 12 + 1
+        first = date(year, month_num, 1)
+        nxt = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
         inc = (
             await db.execute(
                 select(func.coalesce(func.sum(Transaction.amount), 0)).where(
@@ -144,21 +150,27 @@ async def get_dashboard(
     ).scalars().all()
     budgets = []
     for b in budget_rows:
-        spent = (
-            await db.execute(
-                select(func.coalesce(func.sum(-Transaction.amount), 0)).where(
-                    Transaction.date >= month_start,
-                    Transaction.category_id == b.category_id,
-                    Transaction.amount < 0,
-                    Transaction.user_id == user_id,
-                )
-            )
-        ).scalar()
+        spent_query = select(func.coalesce(func.sum(-Transaction.amount), 0)).where(
+            Transaction.date >= month_start,
+            Transaction.date < next_month_start,
+            Transaction.amount < 0,
+            Transaction.user_id == user_id,
+        )
+        if b.category_id is None:
+            # A budget without a category is a general budget: it tracks
+            # every expense for the period, not just uncategorized ones.
+            pass
+        else:
+            spent_query = spent_query.where(Transaction.category_id == b.category_id)
+        spent = (await db.execute(spent_query)).scalar()
         budgets.append({
             "id": b.id,
             "name": b.name,
             "amount": float(b.amount),
             "spent": round(float(spent), 2),
+            "progress_pct": round(float(spent) / float(b.amount) * 100, 1)
+            if float(b.amount) > 0
+            else 0.0,
         })
 
     # --- Wealth: investments, debt, net worth, savings goals ---
