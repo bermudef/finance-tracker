@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: finance-postgres
+    environment:
+      POSTGRES_USER: finance
+      POSTGRES_PASSWORD: finance_dev_password
+      POSTGRES_DB: finance_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - finance_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance -d finance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: finance-backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finance:finance_dev_password@postgres:5432/finance_db
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build: ./frontend
+    container_name: finance-frontend
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  finance_pgdata:
