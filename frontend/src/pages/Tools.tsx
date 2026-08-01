@@ -4,6 +4,7 @@ import {
   type Debt,
   type DebtPayoffResult,
   type RetirementProjectionResult,
+  type BudgetForecastResult,
 } from "../api/client";
 import { Badge, Card, StatCard } from "../components/ui";
 import { formatCurrency } from "../lib/format";
@@ -472,6 +473,100 @@ function RetirementTool() {
   );
 }
 
+function BudgetForecastTool() {
+  const [result, setResult] = useState<BudgetForecastResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    timer = setTimeout(() => {
+      setLoading(true)
+      setError(null)
+      api
+        .post<BudgetForecastResult>("/tools/budget-forecast", { months_back: 6 })
+        .then(setResult)
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [])
+
+  if (loading) return <p className="text-sm text-slate-400">Forecasting…</p>
+  if (error) return <p className="text-sm text-red-600">Forecast failed: {error}</p>
+  if (!result) return null
+
+  return (
+    <Card>
+      <h2 className="text-base font-semibold text-slate-900">Budget forecast</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Weighted moving average of the last 6 months. Categories projected to
+        exceed their budget are flagged.
+      </p>
+
+      {result.forecasts.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-400">
+          No budget or spending data yet — add budgets and transactions to see
+          forecasts.
+        </p>
+      ) : (
+        <>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Total forecast" value={result.total_forecast} />
+            <StatCard label="Total budget" value={result.total_budget} />
+            <StatCard
+              label="Over budget"
+              value={result.flagged.length}
+              positive={false}
+            />
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full max-w-2xl text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+                  <th className="pb-2 font-medium">Category</th>
+                  <th className="pb-2 font-medium text-right">Forecast</th>
+                  <th className="pb-2 font-medium text-right">P90</th>
+                  <th className="pb-2 font-medium text-right">Budget</th>
+                  <th className="pb-2 font-medium text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {result.forecasts.map((f) => (
+                  <tr key={f.category} className="py-2">
+                    <td className="py-2 font-medium text-slate-800">
+                      {f.category}
+                    </td>
+                    <td className="py-2 text-right tabular-nums text-slate-900">
+                      {formatCurrency(f.predicted)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums text-slate-500">
+                      {formatCurrency(f.p90)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums text-slate-900">
+                      {f.budget != null ? formatCurrency(f.budget) : "—"}
+                    </td>
+                    <td className="py-2 text-center">
+                      {f.will_exceed ? (
+                        <Badge tone="red">Over budget</Badge>
+                      ) : f.budget != null ? (
+                        <Badge tone="green">On track</Badge>
+                      ) : (
+                        <Badge tone="slate">No budget</Badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
 export default function ToolsPage() {
   const [inputs, setInputs] = useState<Inputs>(DEFAULT_INPUTS);
   const result = useMemo(() => compute(inputs), [inputs]);
@@ -489,6 +584,8 @@ export default function ToolsPage() {
       <DebtPayoffTool />
 
       <RetirementTool />
+
+      <BudgetForecastTool />
 
       <Card>
         <h2 className="text-base font-semibold text-slate-900">How much house can I afford?</h2>

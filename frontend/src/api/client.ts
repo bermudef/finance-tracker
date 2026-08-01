@@ -368,3 +368,21 @@ export interface RetirementProjectionResult {
   series: RetirementProjectionPoint[];
   summary: RetirementProjectionSummary;
 }
+
+export interface BudgetForecastEntry {
+  category: string;
+  predicted: number;
+  p10: number;
+  p90: number;
+  budget: number | null;
+  will_exceed: boolean;
+  confidence: "high" | "medium" | "low";
+  months_of_data: number;
+}
+
+export interface BudgetForecastResult {
+  forecasts: BudgetForecastEntry[];
+  flagged: BudgetForecastEntry[];
+  total_forecast: number;
+  total_budget: number;
+}
