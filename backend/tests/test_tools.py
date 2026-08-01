@@ -235,3 +235,36 @@ async def test_retirement_projection_input_validation(auth_client):
         "current_age": 30, "retirement_age": 17,
     })
     assert bad.status_code == 422
+
+
+# ---- budget forecast tests ----
+
+
+async def test_budget_forecast_requires_auth(client):
+    resp = await client.post(f"{API}/tools/budget-forecast", json={"months_back": 6})
+    assert resp.status_code == 401
+
+
+async def test_budget_forecast_structure(auth_client):
+    """Forecast returns forecasts list with expected keys."""
+    resp = await auth_client.post(f"{API}/tools/budget-forecast", json={"months_back": 3})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "forecasts" in body
+    assert "flagged" in body
+    assert "total_forecast" in body
+    assert "total_budget" in body
+    if body["forecasts"]:
+        f = body["forecasts"][0]
+        assert {"category", "predicted", "p10", "p90", "budget", "will_exceed", "confidence", "months_of_data"} <= set(f.keys())
+
+
+async def test_budget_forecast_empty_state(auth_client):
+    """With no budgets or transactions, forecast returns empty lists."""
+    resp = await auth_client.post(f"{API}/tools/budget-forecast", json={"months_back": 3})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["forecasts"] == []
+    assert body["flagged"] == []
+    assert body["total_forecast"] == 0.0
+    assert body["total_budget"] == 0.0

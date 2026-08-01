@@ -1,6 +1,8 @@
 """Financial tools endpoints."""
 from __future__ import annotations
 
+from collections import defaultdict
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -11,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.models.database import get_db
 from app.models.domain import Debt
+from app.models.finance import Budget, Category, Transaction
 from app.models.user import User
+from app.services.budget_forecast import forecast, month_key
 from app.services.debt_payoff import compare_strategies
 from app.services.retirement import run_projection
 
@@ -96,3 +100,89 @@ async def retirement_projection(
         inflation_rate=data.inflation_rate,
         std_dev=data.std_dev,
     )
+
+
+class BudgetForecastRequest(BaseModel):
+    months_back: int = Field(default=6, ge=3, le=12, description="Number of past months to analyze")
+
+
+@router.post("/budget-forecast")
+async def budget_forecast(
+    data: BudgetForecastRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Forecast next month's spending by category using a weighted moving average.
+
+    Analyzes the last N months of transaction history, compares against
+    the user's budgets, and flags categories likely to exceed their limit.
+    """
+    today = date.today()
+    month_starts = []
+    for i in range(data.months_back):
+        ms = today.replace(day=1)
+        # Go back i months
+        year = ms.year
+        month = ms.month - i
+        while month <= 0:
+            month += 12
+            year -= 1
+        month_starts.append(date(year, month, 1))
+
+    # Fetch user's budgets
+    budget_rows = (
+        await db.execute(
+            select(Budget).where(Budget.user_id == current_user.id)
+        )
+    ).scalars().all()
+
+    budgets: dict[str, float] = {}
+    budget_category_ids: set[int] = set()
+    for b in budget_rows:
+        budgets[b.category_id] = float(b.amount)
+        budget_category_ids.add(b.category_id)
+
+    # Fetch category names for the budgeted categories
+    cat_rows = (
+        await db.execute(
+            select(Category).where(Category.id.in_(budget_category_ids))
+        )
+    ).scalars().all()
+    cat_id_to_name = {c.id: c.name for c in cat_rows}
+
+    # Fetch transactions for the analyzed months
+    oldest_month = min(month_starts)
+
+    txn_rows = (
+        await db.execute(
+            select(Transaction)
+            .where(
+                Transaction.user_id == current_user.id,
+                Transaction.date >= oldest_month,
+                Transaction.date <= today,
+            )
+            .order_by(Transaction.date)
+        )
+    ).scalars().all()
+
+    # Aggregate spending by category for each month
+    monthly_spending: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for txn in txn_rows:
+        mk = month_key(txn.date)
+        cat_name = cat_id_to_name.get(txn.category_id, "Uncategorized")
+        monthly_spending[cat_name][mk] += float(txn.amount)
+
+    # Build forecast input
+    forecast_input = {}
+    for cat_name, spending_by_month in monthly_spending.items():
+        forecast_input[cat_name] = dict(spending_by_month)
+
+    # Build budget input (map category name to budget amount)
+    budget_input: dict[str, float] = {}
+    for cat_id, amount in budgets.items():
+        cat_name = cat_id_to_name.get(cat_id)
+        if cat_name:
+            budget_input[cat_name] = amount
+
+    result = forecast(forecast_input, budget_input)
+    return result
