@@ -278,6 +278,20 @@ function DebtPayoffTool() {
   );
 }
 
+function RetirementTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+      <p className="text-xs font-semibold text-slate-500">Age {label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-xs tabular-nums" style={{ color: entry.color }}>
+          {entry.name}: {formatCurrency(Number(entry.value))}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function RetirementTool() {
   const [inputs, setInputs] = useState({
     currentAge: 30,
@@ -419,9 +433,9 @@ function RetirementTool() {
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="age" tick={{ fontSize: 11 }} label={{ value: "Age", position: "insideBottom", offset: -5, fontSize: 11, fill: "#94a3b8" }} />
+                <XAxis dataKey="age" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v / 1000}k`} />
-                <Tooltip formatter={(v) => formatCurrency(Number(v))} />
+                <Tooltip content={<RetirementTooltip />} />
                 <Legend />
 
                 {/* 80% confidence band: p10 → p90 */}
