@@ -101,14 +101,42 @@ async def main() -> None:
 
         groceries = await _get_or_create_category(session, user, "Groceries", "expense")
         salary = await _get_or_create_category(session, user, "Salary", "income")
+        rent = await _get_or_create_category(session, user, "Rent", "expense")
+        utilities = await _get_or_create_category(session, user, "Utilities", "expense")
+        dining = await _get_or_create_category(session, user, "Dining", "expense")
+        gas = await _get_or_create_category(session, user, "Gas", "expense")
+        insurance = await _get_or_create_category(session, user, "Insurance", "expense")
 
-        # Transactions (skip if already seeded by date+description)
+        # Recurring transactions across the last 3 months so the dashboard
+        # series, statements, and health score have realistic depth. Each
+        # pattern is a function of the month's first day.
+        last_months = []
+        for i in range(2, -1, -1):
+            offset = TODAY.month - 1 - i
+            year = TODAY.year + offset // 12
+            last_months.append(date(year, offset % 12 + 1, 1))
+
+        monthly_patterns = [
+            lambda m: (m.replace(day=1), 8000.00, "Monthly salary", None, checking, salary),
+            lambda m: (m.replace(day=3), -1850.00, "Rent", None, checking, rent),
+            lambda m: (m.replace(day=5), -560.00, "Groceries", "Whole Foods", checking, groceries),
+            lambda m: (m.replace(day=12), -135.00, "Electric & water", None, checking, utilities),
+            lambda m: (m.replace(day=15), -95.00, "Dining out", "Local Bistro", checking, dining),
+            lambda m: (m.replace(day=20), -52.00, "Gas", "Shell", checking, gas),
+            lambda m: (m.replace(day=22), -240.00, "Health insurance", None, checking, insurance),
+            lambda m: (m.replace(day=25), -15.99, "Netflix", "Netflix", checking, None),
+        ]
+
+        # One-off recent transactions (idempotent by description + date).
         seed_txs = [
             (TODAY - timedelta(days=1), -45.25, "Whole Foods", "WF", checking, groceries),
-            (TODAY - timedelta(days=3), -9.99, "Netflix", None, checking, None),
-            (TODAY - timedelta(days=5), -32.10, "Shell Gas Station", None, checking, None),
-            (TODAY.replace(day=1), 8000.00, "Monthly salary", None, checking, salary),
+            (TODAY - timedelta(days=3), -32.10, "Shell Gas Station", None, checking, gas),
+            (TODAY - timedelta(days=6), -85.00, "Dinner with friends", "Pasta Palace", checking, dining),
         ]
+
+        for month_start in last_months:
+            seed_txs += [pattern(month_start) for pattern in monthly_patterns]
+
         for tx_date, amount, desc, merchant, account, category in seed_txs:
             exists = await session.execute(
                 select(Transaction.id).where(
@@ -183,11 +211,15 @@ async def main() -> None:
         )
         await _get_or_create_by_name(
             session, user, Budget, "Groceries",
-            amount=600.00, period="monthly", category_id=groceries.id,
+            amount=700.00, period="monthly", category_id=groceries.id,
         )
         await _get_or_create_by_name(
             session, user, Budget, "Fun",
-            amount=300.00, period="monthly",
+            amount=250.00, period="monthly", category_id=dining.id,
+        )
+        await _get_or_create_by_name(
+            session, user, Budget, "Everyday spending",
+            amount=3300.00, period="monthly", category_id=None,
         )
 
         await session.commit()

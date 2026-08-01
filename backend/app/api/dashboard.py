@@ -169,6 +169,8 @@ async def get_dashboard(
         # Project month-end spend from what's already been spent: if you've
         # spent $60 of a $100 budget in the first 10 days, you're on pace to
         # spend ~$180. That forward-looking signal drives the status badge.
+        # On the last day of the month the projection is final, so a budget
+        # that's merely >75% used is on track, not at risk.
         projected = (
             round(float(spent) / days_elapsed * days_in_month, 2)
             if float(spent) > 0
@@ -176,7 +178,7 @@ async def get_dashboard(
         )
         if amount > 0 and projected >= amount:
             status = "over"
-        elif amount > 0 and projected >= 0.75 * amount:
+        elif amount > 0 and days_elapsed < days_in_month and projected >= 0.75 * amount:
             status = "at_risk"
         else:
             status = "on_track"

@@ -212,6 +212,55 @@ async def test_health_score_reflects_liquid_assets(auth_client):
     assert "months" in fund["detail"]
 
 
+async def test_savings_rate_uses_positive_expense_magnitude(auth_client):
+    """Regression: the router must pass expense as a positive magnitude, not the
+    negative sum of transactions (which produced 'Saving 139%')."""
+    await _seed_scenario(auth_client)  # income 8000, expense 400 in July
+    body = (await auth_client.get(f"{API}/health-score")).json()
+    savings = next(s for s in body["subscores"] if s["key"] == "savings_rate")
+    # 8000 income, 400 expense -> 95% savings rate; a negative expense would
+    # have produced >100% and the sub-score text would look absurd.
+    assert savings["score"] == 100.0
+    assert "95%" in savings["detail"]
+
+
+async def test_budget_at_75pct_used_is_not_at_risk_at_month_end(auth_client):
+    """Regression: on the last day of the month a budget that has used ~90% of
+    its limit can no longer go over, so it must be 'on track' — not 'at risk'.
+    Mid-month it should still warn."""
+    from datetime import date, timedelta
+
+    await auth_client.post(f"{API}/categories", json={"name": "Dining", "type": "expense"})
+    await auth_client.post(
+        f"{API}/accounts", json={"name": "Checking", "type": "checking", "opening_balance": 1000}
+    )
+    accounts = (await auth_client.get(f"{API}/accounts")).json()
+    checking = accounts[0]["id"]
+    cats = (await auth_client.get(f"{API}/categories")).json()
+    dining = next(c for c in cats if c["name"] == "Dining")
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    days_in_month = ((month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - month_start).days
+    days_elapsed = max((today - month_start).days + 1, 1)
+
+    await auth_client.post(
+        f"{API}/budgets",
+        json={"name": "Dining", "amount": 100, "period": "monthly", "category_id": dining["id"]},
+    )
+    await auth_client.post(
+        f"{API}/transactions",
+        json={"account_id": checking, "category_id": dining["id"], "date": today.isoformat(), "amount": -90, "description": "Dinner"},
+    )
+
+    body = (await auth_client.get(f"{API}/health-score")).json()
+    detail = next(s for s in body["subscores"] if s["key"] == "budget_adherence")["detail"]
+    if days_elapsed >= days_in_month:
+        assert "on track" in detail and "at risk" not in detail
+    else:
+        assert "at risk" in detail
+
+
 async def test_health_score_isolated_per_user(auth_client, second_user_headers):
     await _seed_scenario(auth_client)
     resp = await auth_client.get(f"{API}/health-score")

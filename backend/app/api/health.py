@@ -52,7 +52,9 @@ async def get_health_score(
 
     # --- Cash flow ---
     income_this_month = await _sum_transactions(db, user_id, month_start, next_month_start, positive=True)
-    expense_this_month = await _sum_transactions(db, user_id, month_start, next_month_start, positive=False)
+    # _sum_transactions(positive=False) returns the negative sum; the service
+    # expects positive magnitudes (savings rate = (income - expense) / income).
+    expense_this_month = -await _sum_transactions(db, user_id, month_start, next_month_start, positive=False)
 
     # Average monthly expense across the current + previous 2 months.
     expense_sums = []
@@ -109,10 +111,13 @@ async def get_health_score(
             spent_query = spent_query.where(Transaction.category_id == b.category_id)
         spent = float((await db.execute(spent_query)).scalar() or 0)
         amount = float(b.amount or 0)
+        # Project month-end spend, but only treat the projection as a live
+        # warning while there are days left in the month. On the last day the
+        # projection is final: spent >= amount is simply "over".
         projected = spent / days_elapsed * days_in_month if spent > 0 else 0.0
         if amount > 0 and projected >= amount:
             statuses["over"] += 1
-        elif amount > 0 and projected >= 0.75 * amount:
+        elif amount > 0 and days_elapsed < days_in_month and projected >= 0.75 * amount:
             statuses["at_risk"] += 1
         else:
             statuses["on_track"] += 1
