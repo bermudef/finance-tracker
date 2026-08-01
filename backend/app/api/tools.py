@@ -18,6 +18,7 @@ from app.models.user import User
 from app.services.budget_forecast import forecast, month_key
 from app.services.debt_payoff import compare_strategies
 from app.services.retirement import run_projection
+from app.services.tax_estimation import estimate_tax
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 
@@ -186,3 +187,30 @@ async def budget_forecast(
 
     result = forecast(forecast_input, budget_input)
     return result
+
+
+class TaxEstimateRequest(BaseModel):
+    annual_income: float = Field(default=0.0, ge=0, description="Annual ordinary income")
+    capital_gains: float = Field(default=0.0, ge=0, description="Long-term capital gains")
+    deductions: float = Field(default=0.0, ge=0, description="Above-the-line deductions")
+    self_employment_income: float = Field(default=0.0, ge=0, description="Net self-employment earnings")
+
+
+@router.post("/tax-estimate")
+async def tax_estimate(
+    data: TaxEstimateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Estimate annual federal tax liability using 2025 brackets.
+
+    Computes ordinary income tax, long-term capital gains tax,
+    and self-employment tax. Returns a breakdown with effective
+    and marginal rates plus quarterly estimated payment amounts.
+    """
+    return estimate_tax(
+        annual_income=data.annual_income,
+        capital_gains=data.capital_gains,
+        deductions=data.deductions,
+        self_employment_income=data.self_employment_income,
+    )

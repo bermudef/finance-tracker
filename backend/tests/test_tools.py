@@ -268,3 +268,54 @@ async def test_budget_forecast_empty_state(auth_client):
     assert body["flagged"] == []
     assert body["total_forecast"] == 0.0
     assert body["total_budget"] == 0.0
+
+
+# ---- tax estimation tests ----
+
+
+async def test_tax_estimate_requires_auth(client):
+    resp = await client.post(f"{API}/tools/tax-estimate", json={"annual_income": 100000})
+    assert resp.status_code == 401
+
+
+async def test_tax_estimate_structure(auth_client):
+    resp = await auth_client.post(
+        f"{API}/tools/tax-estimate",
+        json={"annual_income": 100000, "capital_gains": 5000, "deductions": 5000},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "annual_income" in body
+    assert "taxable_income" in body
+    assert "ordinary_tax" in body
+    assert "capital_gains_tax" in body
+    assert "total_tax" in body
+    assert "effective_rate" in body
+    assert "marginal_rate" in body
+    assert "quarterly_estimated" in body
+    assert body["total_tax"] >= 0
+
+
+async def test_tax_estimate_zero_income(auth_client):
+    resp = await auth_client.post(f"{API}/tools/tax-estimate", json={})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_tax"] == 0.0
+    assert body["effective_rate"] == 0.0
+
+
+async def test_tax_estimate_high_income(auth_client):
+    """High income should have a higher effective rate."""
+    low = (
+        await auth_client.post(
+            f"{API}/tools/tax-estimate",
+            json={"annual_income": 50000},
+        )
+    ).json()
+    high = (
+        await auth_client.post(
+            f"{API}/tools/tax-estimate",
+            json={"annual_income": 200000},
+        )
+    ).json()
+    assert high["effective_rate"] > low["effective_rate"]
