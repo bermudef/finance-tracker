@@ -18,6 +18,7 @@ from app.api import (
     debts,
     investments,
     savings_goals,
+    notifications,
     bills,
     reports,
     tools,
@@ -58,6 +59,7 @@ app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(tools.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

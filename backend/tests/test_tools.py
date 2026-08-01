@@ -352,3 +352,49 @@ async def test_assistant_unknown_intent(auth_client):
     body = resp.json()
     assert body["intent"] == "unknown"
     assert "spending" in body["answer"].lower() or "savings" in body["answer"].lower()
+
+
+# ---- notifications tests ----
+
+
+async def test_notifications_requires_auth(client):
+    resp = await client.get(f"{API}/notifications")
+    assert resp.status_code == 401
+
+
+async def test_notifications_crud(auth_client):
+    # Create
+    resp = await auth_client.post(
+        f"{API}/notifications",
+        json={"title": "Test", "message": "Hello", "type": "general"},
+    )
+    assert resp.status_code == 200
+    created = resp.json()
+    assert created["title"] == "Test"
+    assert created["read"] is False
+    notif_id = created["id"]
+
+    # List
+    resp = await auth_client.get(f"{API}/notifications")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) >= 1
+    assert any(n["id"] == notif_id for n in body)
+
+    # Mark read
+    resp = await auth_client.patch(f"{API}/notifications/{notif_id}/read")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+    # Verify read
+    resp = await auth_client.get(f"{API}/notifications")
+    assert any(n["id"] == notif_id and n["read"] for n in resp.json())
+
+    # Delete
+    resp = await auth_client.delete(f"{API}/notifications/{notif_id}")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "deleted"
+
+    # Verify deleted
+    resp = await auth_client.get(f"{API}/notifications")
+    assert not any(n["id"] == notif_id for n in resp.json())

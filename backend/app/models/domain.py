@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy.orm import relationship
 
 from app.models.database import Base
 
@@ -87,3 +88,19 @@ class Bill(Base):
     is_active = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Notification(Base):
+    """User notifications: bill reminders, budget alerts, savings milestones."""
+
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    type = Column(String(20), nullable=False)  # bill_reminder, budget_alert, savings_milestone, general
+    read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="notifications")

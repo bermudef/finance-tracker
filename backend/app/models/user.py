@@ -24,3 +24,4 @@ class User(Base):
     categories = relationship("Category", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
     budgets = relationship("Budget", back_populates="user")
+    notifications = relationship("Notification", back_populates="user", order_by="Notification.created_at")
