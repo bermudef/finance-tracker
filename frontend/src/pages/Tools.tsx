@@ -8,8 +8,6 @@ import {
 import { Badge, Card, StatCard } from "../components/ui";
 import { formatCurrency } from "../lib/format";
 import {
-  Area,
-  AreaChart,
   CartesianGrid,
   Legend,
   Line,
@@ -431,31 +429,12 @@ function RetirementTool() {
               Balance distribution by age
             </h3>
             <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={chartData}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="age" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v / 1000}k`} />
                 <Tooltip content={<RetirementTooltip />} />
                 <Legend />
-
-                {/* 80% confidence band: p10 → p90 */}
-                <Area
-                  type="monotone"
-                  dataKey="p90"
-                  stroke="#10b981"
-                  fill="#10b981"
-                  fillOpacity={0.1}
-                  strokeWidth={1}
-                  dot={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="p10"
-                  stroke="none"
-                  fill="white"
-                  fillOpacity={1}
-                  dot={false}
-                />
 
                 {/* Key percentile lines */}
                 <Line
@@ -484,7 +463,7 @@ function RetirementTool() {
                   dot={false}
                   strokeDasharray="6 3"
                 />
-              </AreaChart>
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </>
