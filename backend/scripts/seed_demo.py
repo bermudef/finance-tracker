@@ -68,6 +68,29 @@ async def _get_or_create_category(session: AsyncSession, user: User, name: str, 
     return category
 
 
+async def _get_or_create_by_name(session: AsyncSession, user: User, model, name: str, **kw):
+    """Get a row by (user, name) on any user-scoped model, creating it or
+    converging existing rows to `kw`. Keeps the seed idempotent across reruns
+    even when the previous run created multiple rows."""
+    result = await session.execute(
+        select(model).where(model.user_id == user.id, model.name == name)
+    )
+    obj = result.scalar_one_or_none()
+    if obj is None:
+        obj = model(user_id=user.id, name=name, **kw)
+        session.add(obj)
+        await session.flush()
+        return obj
+    changed = False
+    for key, value in kw.items():
+        if getattr(obj, key) != value:
+            setattr(obj, key, value)
+            changed = True
+    if changed:
+        session.add(obj)  # mark dirty for the commit
+    return obj
+
+
 async def main() -> None:
     await init_db()
     async with async_session() as session:
@@ -107,43 +130,65 @@ async def main() -> None:
                     )
                 )
 
-        # Domain records
-        if not (await session.execute(select(CreditCard).where(CreditCard.user_id == user.id))).scalar_one_or_none():
-            session.add_all(
-                [
-                    CreditCard(user_id=user.id, name="Chase Sapphire Preferred", balance=2400.00, credit_limit=10000.00, apr=24.99, payment_due_date=TODAY + timedelta(days=10), min_payment=85.00),
-                    CreditCard(user_id=user.id, name="Amex Blue Cash", balance=0.00, credit_limit=8000.00, apr=19.49, payment_due_date=None, min_payment=0.00),
-                ]
-            )
-        if not (await session.execute(select(Debt).where(Debt.user_id == user.id))).scalar_one_or_none():
-            session.add(
-                Debt(user_id=user.id, name="Student Loan", type="student", principal=12000.00, interest_rate=5.5, min_payment=150.00, payment_due_date=TODAY + timedelta(days=5), remaining_term_months=96)
-            )
-        if not (await session.execute(select(Investment).where(Investment.user_id == user.id))).scalar_one_or_none():
-            session.add_all(
-                [
-                    Investment(user_id=user.id, name="Vanguard Total Market", type="etf", symbol="VTI", cost_basis=10000.00, current_value=13250.00, account_name="Brokerage"),
-                    Investment(user_id=user.id, name="Fidelity 401k", type="retirement", symbol=None, cost_basis=18000.00, current_value=22750.00, account_name="Fidelity"),
-                ]
-            )
-        if not (await session.execute(select(SavingsGoal).where(SavingsGoal.user_id == user.id))).scalar_one_or_none():
-            session.add(
-                SavingsGoal(user_id=user.id, name="Emergency Fund", target_amount=15000.00, current_amount=6000.00, target_date=None)
-            )
-        if not (await session.execute(select(Bill).where(Bill.user_id == user.id))).scalar_one_or_none():
-            session.add_all(
-                [
-                    Bill(user_id=user.id, name="Netflix", amount=15.99, due_date=TODAY + timedelta(days=2), frequency="monthly", auto_pay=True),
-                    Bill(user_id=user.id, name="Rent", amount=1850.00, due_date=TODAY.replace(day=1), frequency="monthly", auto_pay=True),
-                ]
-            )
-        if not (await session.execute(select(Budget).where(Budget.user_id == user.id))).scalar_one_or_none():
-            session.add_all(
-                [
-                    Budget(user_id=user.id, name="Groceries", amount=600.00, period="monthly", category_id=groceries.id),
-                    Budget(user_id=user.id, name="Fun", amount=300.00, period="monthly"),
-                ]
-            )
+        # Domain records — all per-name idempotent (safe across reruns even when
+        # the previous run created multiple rows).
+        await _get_or_create_by_name(
+            session, user, CreditCard, "Chase Sapphire Preferred",
+            balance=2400.00, credit_limit=10000.00, apr=24.99,
+            payment_due_date=TODAY + timedelta(days=10), min_payment=85.00,
+        )
+        await _get_or_create_by_name(
+            session, user, CreditCard, "Amex Blue Cash",
+            balance=0.00, credit_limit=8000.00, apr=19.49,
+            payment_due_date=None, min_payment=0.00,
+        )
+        # Debts — sized so the payoff optimizer demo diverges: avalanche targets
+        # the high-APR Chase card first, while snowball targets the smaller
+        # Student Loan first.
+        await _get_or_create_by_name(
+            session, user, Debt, "Student Loan",
+            type="student", principal=6000.00, interest_rate=5.5,
+            min_payment=150.00, payment_due_date=TODAY + timedelta(days=5),
+            remaining_term_months=48,
+        )
+        await _get_or_create_by_name(
+            session, user, Debt, "Chase Sapphire",
+            type="credit_card", principal=12000.00, interest_rate=24.99,
+            min_payment=250.00, payment_due_date=TODAY + timedelta(days=15),
+            remaining_term_months=None,
+        )
+        await _get_or_create_by_name(
+            session, user, Investment, "Vanguard Total Market",
+            type="etf", symbol="VTI", cost_basis=10000.00,
+            current_value=13250.00, account_name="Brokerage",
+        )
+        await _get_or_create_by_name(
+            session, user, Investment, "Fidelity 401k",
+            type="retirement", symbol=None, cost_basis=18000.00,
+            current_value=22750.00, account_name="Fidelity",
+        )
+        await _get_or_create_by_name(
+            session, user, SavingsGoal, "Emergency Fund",
+            target_amount=15000.00, current_amount=6000.00, target_date=None,
+        )
+        await _get_or_create_by_name(
+            session, user, Bill, "Netflix",
+            amount=15.99, due_date=TODAY + timedelta(days=2),
+            frequency="monthly", auto_pay=True,
+        )
+        await _get_or_create_by_name(
+            session, user, Bill, "Rent",
+            amount=1850.00, due_date=TODAY.replace(day=1),
+            frequency="monthly", auto_pay=True,
+        )
+        await _get_or_create_by_name(
+            session, user, Budget, "Groceries",
+            amount=600.00, period="monthly", category_id=groceries.id,
+        )
+        await _get_or_create_by_name(
+            session, user, Budget, "Fun",
+            amount=300.00, period="monthly",
+        )
 
         await session.commit()
         print(f"Seeded user {user.email} (password: testpass123)")
