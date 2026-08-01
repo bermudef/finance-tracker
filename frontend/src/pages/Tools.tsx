@@ -406,7 +406,7 @@ function RetirementTool() {
       {result && !loading && (
         <>
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Years to retirement" value={result.years_to_retirement} />
+            <StatCard label="Years to retirement" value={result.years_to_retirement} format="number" />
             <StatCard label="Median balance (nominal)" value={result.summary.median_nominal} />
             <StatCard label="P10 (conservative)" value={result.summary.p10_nominal} />
             <StatCard label="P90 (optimistic)" value={result.summary.p90_nominal} />
