@@ -418,16 +418,6 @@ function RetirementTool() {
             </h3>
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="outerBand" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.12} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.04} />
-                  </linearGradient>
-                  <linearGradient id="innerBand" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.22} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.08} />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="age" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v / 1000}k`} />
@@ -440,7 +430,8 @@ function RetirementTool() {
                   dataKey="p90"
                   name="P90"
                   stroke="#10b981"
-                  fill="url(#outerBand)"
+                  fill="#10b981"
+                  fillOpacity={0.1}
                   strokeWidth={1}
                   dot={false}
                 />
@@ -448,26 +439,6 @@ function RetirementTool() {
                   type="monotone"
                   dataKey="p10"
                   name="P10"
-                  stroke="none"
-                  fill="white"
-                  fillOpacity={1}
-                  dot={false}
-                />
-
-                {/* 50% IQR band: p25 → p75 */}
-                <Area
-                  type="monotone"
-                  dataKey="p75"
-                  name="P75"
-                  stroke="#10b981"
-                  fill="url(#innerBand)"
-                  strokeWidth={1}
-                  dot={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="p25"
-                  name="P25"
                   stroke="none"
                   fill="white"
                   fillOpacity={1}
