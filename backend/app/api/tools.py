@@ -12,13 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.models.database import get_db
-from app.models.domain import Debt
-from app.models.finance import Budget, Category, Transaction
+from app.models.domain import Debt, Investment
+from app.models.finance import Account, Budget, Category, Transaction
 from app.models.user import User
 from app.services.budget_forecast import forecast, month_key
 from app.services.debt_payoff import compare_strategies
+from app.services.financial_assistant import answer_question
+from app.services.health_score import compute_health_score
 from app.services.retirement import run_projection
 from app.services.tax_estimation import estimate_tax
+
+router = APIRouter(prefix="/tools", tags=["tools"])
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 
@@ -214,3 +218,102 @@ async def tax_estimate(
         deductions=data.deductions,
         self_employment_income=data.self_employment_income,
     )
+
+
+class FinancialAssistantRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=500, description="Natural-language financial question")
+
+
+@router.post("/assistant")
+async def financial_assistant(
+    data: FinancialAssistantRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Answer a natural-language financial question using the user's data.
+
+    The assistant parses the question to identify intent (spending, saving,
+    net worth, budget, debt, investments, income, retirement, tax, or health)
+    and generates a contextual response with actionable guidance.
+    """
+    # Fetch the user's dashboard data for context
+    from app.api.dashboard import get_dashboard
+
+    # Build a mock request to get dashboard data
+    from fastapi import Request
+
+    # We need the dashboard data, so let's fetch it directly
+    today = date.today()
+    month_start = today.replace(day=1)
+    next_month_start = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+    from sqlalchemy import func, select as sqla_select
+
+    # Get accounts
+    account_rows = (
+        await db.execute(
+            sqla_select(Account).where(Account.user_id == current_user.id)
+        )
+    ).scalars().all()
+
+    total_balance = sum(float(a.balance) for a in account_rows)
+
+    # Get transactions for the month
+    txn_rows = (
+        await db.execute(
+            sqla_select(Transaction)
+            .where(
+                Transaction.user_id == current_user.id,
+                Transaction.date >= month_start,
+                Transaction.date < next_month_start,
+            )
+        )
+    ).scalars().all()
+
+    monthly_income = sum(float(t.amount) for t in txn_rows if t.amount > 0)
+    monthly_expense = abs(sum(float(t.amount) for t in txn_rows if t.amount < 0))
+
+    # Get debt
+    debt_rows = (
+        await db.execute(
+            sqla_select(Debt).where(Debt.user_id == current_user.id, Debt.is_active.is_(True))
+        )
+    ).scalars().all()
+    total_debt = sum(float(d.principal) for d in debt_rows)
+
+    # Get investments
+    inv_rows = (
+        await db.execute(
+            sqla_select(Investment).where(Investment.user_id == current_user.id)
+        )
+    ).scalars().all()
+    investment_value = sum(float(i.current_value) for i in inv_rows)
+    investment_gain_loss = sum(
+        float(i.current_value) - float(i.cost_basis) for i in inv_rows
+    )
+
+    # Get budgets
+    budget_rows = (
+        await db.execute(
+            sqla_select(Budget).where(Budget.user_id == current_user.id)
+        )
+    ).scalars().all()
+
+    # Get health score
+    from app.api.health import gather_health_metrics, compute_health_score as _compute_health_score
+    metrics = await gather_health_metrics(db, current_user.id)
+    health = _compute_health_score(metrics)
+
+    dashboard_data = {
+        "monthly": {"income": monthly_income, "expense": monthly_expense, "net": monthly_income - monthly_expense},
+        "net_worth": total_balance - total_debt,
+        "debt": {"total": total_debt},
+        "investments": {"total_value": investment_value, "gain_loss": investment_gain_loss},
+        "budgets": [
+            {"status": "on_track", "name": b.name, "amount": float(b.amount)}
+            for b in budget_rows
+        ],
+        "health": {"score": health["score"], "grade": health["grade"]},
+    }
+
+    return answer_question(data.question, dashboard_data)

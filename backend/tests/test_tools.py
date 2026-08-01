@@ -319,3 +319,36 @@ async def test_tax_estimate_high_income(auth_client):
         )
     ).json()
     assert high["effective_rate"] > low["effective_rate"]
+
+
+# ---- financial assistant tests ----
+
+
+async def test_assistant_requires_auth(client):
+    resp = await client.post(f"{API}/tools/assistant", json={"question": "Where is my money going?"})
+    assert resp.status_code == 401
+
+
+async def test_assistant_structure(auth_client):
+    resp = await auth_client.post(
+        f"{API}/tools/assistant",
+        json={"question": "Where is my money going?"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "intent" in body
+    assert "question" in body
+    assert "answer" in body
+    assert isinstance(body["answer"], str)
+    assert len(body["answer"]) > 0
+
+
+async def test_assistant_unknown_intent(auth_client):
+    resp = await auth_client.post(
+        f"{API}/tools/assistant",
+        json={"question": "What is the weather today?"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["intent"] == "unknown"
+    assert "spending" in body["answer"].lower() or "savings" in body["answer"].lower()
