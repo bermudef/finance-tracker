@@ -23,6 +23,7 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 import app.models.finance  # noqa: E402,F401  (register tables)
 import app.models.password_reset  # noqa: E402,F401
 import app.models.user  # noqa: E402,F401
+import app.models.domain  # noqa: E402,F401  (credit_cards, debts, investments, savings_goals, bills)
 from app.models.database import Base, engine  # noqa: E402
 from main import app  # noqa: E402
 

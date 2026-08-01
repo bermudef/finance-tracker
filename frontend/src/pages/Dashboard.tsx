@@ -43,9 +43,70 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total Balance" value={data.total_balance} />
+        <StatCard label="Net Worth" value={data.net_worth} />
         <StatCard label="Income (this month)" value={data.monthly.income} sub="vs. last month" />
         <StatCard label="Expenses (this month)" value={-data.monthly.expense} />
-        <StatCard label="Net (this month)" value={data.monthly.net} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card>
+          <h2 className="mb-3 text-sm font-semibold text-slate-700">Investments</h2>
+          <p className="text-2xl font-semibold tabular-nums text-slate-900">
+            {formatCurrency(data.investments.total_value)}
+          </p>
+          <p
+            className={`mt-1 text-sm font-medium tabular-nums ${
+              data.investments.gain_loss >= 0 ? "text-emerald-600" : "text-red-600"
+            }`}
+          >
+            {formatCurrency(data.investments.gain_loss, "USD", true)} ({formatCurrency(data.investments.total_cost_basis)} cost)
+          </p>
+        </Card>
+
+        <Card>
+          <h2 className="mb-3 text-sm font-semibold text-slate-700">Debt</h2>
+          <p className="text-2xl font-semibold tabular-nums text-red-600">
+            {formatCurrency(data.debt.total)}
+          </p>
+          <ul className="mt-2 space-y-1">
+            {Object.entries(data.debt.by_type).map(([type, amount]) => (
+              <li key={type} className="flex items-center justify-between text-sm text-slate-600">
+                <span className="capitalize">{type.replace("_", " ")}</span>
+                <span className="tabular-nums">{formatCurrency(amount)}</span>
+              </li>
+            ))}
+            {Object.keys(data.debt.by_type).length === 0 && (
+              <li className="text-sm text-slate-400">No debt 🎉</li>
+            )}
+          </ul>
+        </Card>
+
+        <Card>
+          <h2 className="mb-3 text-sm font-semibold text-slate-700">Savings Goals</h2>
+          <ul className="space-y-3">
+            {data.savings_goals.map((g) => (
+              <li key={g.id}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-slate-800">{g.name}</span>
+                  <span className="tabular-nums text-slate-500">
+                    {formatCurrency(g.current_amount)} / {formatCurrency(g.target_amount)}
+                  </span>
+                </div>
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full rounded-full ${
+                      g.progress_pct >= 100 ? "bg-emerald-500" : "bg-blue-500"
+                    }`}
+                    style={{ width: `${Math.min(g.progress_pct, 100)}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+            {data.savings_goals.length === 0 && (
+              <li className="text-sm text-slate-400">No goals yet.</li>
+            )}
+          </ul>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

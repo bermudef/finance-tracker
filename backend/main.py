@@ -7,7 +7,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.models.database import init_db
-from app.api import accounts, categories, transactions, budgets, dashboard, auth
+from app.api import (
+    accounts,
+    categories,
+    transactions,
+    budgets,
+    dashboard,
+    auth,
+    credit_cards,
+    debts,
+    investments,
+    savings_goals,
+    bills,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +43,11 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(accounts.router, prefix="/api/v1")
+app.include_router(credit_cards.router, prefix="/api/v1")
+app.include_router(debts.router, prefix="/api/v1")
+app.include_router(investments.router, prefix="/api/v1")
+app.include_router(savings_goals.router, prefix="/api/v1")
+app.include_router(bills.router, prefix="/api/v1")
 app.include_router(categories.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 app.include_router(budgets.router, prefix="/api/v1")

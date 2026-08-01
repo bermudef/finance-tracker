@@ -11,7 +11,14 @@ const ForgotPasswordPage = lazy(() => import("./pages/ForgotPassword"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPassword"));
 const DashboardPage = lazy(() => import("./pages/Dashboard"));
 const TransactionsPage = lazy(() => import("./pages/Transactions"));
-const SimplePage = lazy(() => import("./pages/SimplePage"));
+const AccountsPage = lazy(() => import("./pages/Accounts"));
+const CategoriesPage = lazy(() => import("./pages/Categories"));
+const BudgetsPage = lazy(() => import("./pages/Budgets"));
+const CreditCardsPage = lazy(() => import("./pages/CreditCards"));
+const DebtsPage = lazy(() => import("./pages/Debts"));
+const InvestmentsPage = lazy(() => import("./pages/Investments"));
+const SavingsGoalsPage = lazy(() => import("./pages/SavingsGoals"));
+const BillsPage = lazy(() => import("./pages/Bills"));
 
 function PageFallback() {
   return <p className="p-8 text-sm text-slate-500">Loading…</p>;
@@ -79,9 +86,14 @@ export default function App() {
             >
               <Route index element={<DashboardPage />} />
               <Route path="transactions" element={<TransactionsPage />} />
-              <Route path="budgets" element={<SimplePage title="Budgets" />} />
-              <Route path="accounts" element={<SimplePage title="Accounts" />} />
-              <Route path="categories" element={<SimplePage title="Categories" />} />
+              <Route path="budgets" element={<BudgetsPage />} />
+              <Route path="accounts" element={<AccountsPage />} />
+              <Route path="categories" element={<CategoriesPage />} />
+              <Route path="credit-cards" element={<CreditCardsPage />} />
+              <Route path="debts" element={<DebtsPage />} />
+              <Route path="investments" element={<InvestmentsPage />} />
+              <Route path="savings-goals" element={<SavingsGoalsPage />} />
+              <Route path="bills" element={<BillsPage />} />
             </Route>
           </Routes>
         </Suspense>

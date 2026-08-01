@@ -3,9 +3,14 @@ import { useAuth } from "../context/AuthContext";
 
 const navItems = [
   { to: "/", label: "Dashboard" },
-  { to: "/transactions", label: "Transactions" },
-  { to: "/budgets", label: "Budgets" },
   { to: "/accounts", label: "Accounts" },
+  { to: "/transactions", label: "Transactions" },
+  { to: "/credit-cards", label: "Credit Cards" },
+  { to: "/debts", label: "Debts" },
+  { to: "/investments", label: "Investments" },
+  { to: "/savings-goals", label: "Savings Goals" },
+  { to: "/bills", label: "Bills" },
+  { to: "/budgets", label: "Budgets" },
   { to: "/categories", label: "Categories" },
 ];
 
@@ -19,14 +24,14 @@ export default function Layout() {
         <div className="mb-6 px-2 text-lg font-bold text-slate-900">
           Finance<span className="text-emerald-600">Tracker</span>
         </div>
-        <nav className="flex flex-1 flex-col gap-1">
+        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === "/"}
               className={({ isActive }) =>
-                `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                `rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-emerald-50 text-emerald-700"
                     : "text-slate-600 hover:bg-slate-100"

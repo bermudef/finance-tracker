@@ -17,6 +17,7 @@ from app.models.database import Base  # noqa: E402
 import app.models.user  # noqa: E402,F401  (register users table)
 import app.models.finance  # noqa: E402,F401  (register tables with Base.metadata)
 import app.models.password_reset  # noqa: E402,F401  (register password_reset_tokens)
+import app.models.domain  # noqa: E402,F401  (register credit_cards, debts, investments, savings_goals, bills)
 
 config = context.config
 

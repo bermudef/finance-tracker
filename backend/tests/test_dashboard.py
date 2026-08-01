@@ -158,3 +158,75 @@ async def test_dashboard_isolated_between_users(auth_client, second_user_headers
     assert other["total_balance"] == 0.0
     assert other["accounts"] == []
     assert other["monthly"]["income"] == 0.0
+
+
+async def test_net_worth_assets_minus_liabilities(auth_client):
+    await _seed(
+        auth_client,
+        balances={"Checking": 5000},
+        transactions=[],
+    )
+    await auth_client.post(
+        f"{API}/investments",
+        json={"name": "VTI", "type": "etf", "cost_basis": 1000, "current_value": 1500},
+    )
+    await auth_client.post(
+        f"{API}/credit-cards",
+        json={"name": "Visa", "balance": 2000, "credit_limit": 5000, "apr": 20},
+    )
+    await auth_client.post(
+        f"{API}/debts",
+        json={"name": "Student Loan", "type": "student", "principal": 10000, "interest_rate": 5},
+    )
+
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert body["total_balance"] == 5000.0
+    assert body["net_worth"] == 5000 + 1500 - 2000 - 10000  # assets - liabilities
+    assert body["debt"]["total"] == 12000.0
+    assert body["investments"]["total_value"] == 1500.0
+    assert body["investments"]["total_cost_basis"] == 1000.0
+    assert body["investments"]["gain_loss"] == 500.0
+
+
+async def test_debt_breakdown_by_type(auth_client):
+    await auth_client.post(
+        f"{API}/debts", json={"name": "Car", "type": "auto", "principal": 15000}
+    )
+    await auth_client.post(
+        f"{API}/debts", json={"name": "House", "type": "mortgage", "principal": 200000}
+    )
+    await auth_client.post(
+        f"{API}/debts", json={"name": "Second Car", "type": "auto", "principal": 5000}
+    )
+    await auth_client.post(
+        f"{API}/credit-cards", json={"name": "Visa", "balance": 500}
+    )
+
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert body["debt"]["total"] == 220500.0
+    assert body["debt"]["by_type"]["auto"] == 20000.0
+    assert body["debt"]["by_type"]["mortgage"] == 200000.0
+    assert body["debt"]["by_type"]["credit_card"] == 500.0
+
+
+async def test_savings_goal_progress(auth_client):
+    await auth_client.post(
+        f"{API}/savings-goals",
+        json={"name": "Emergency Fund", "target_amount": 10000, "current_amount": 2500},
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert len(body["savings_goals"]) == 1
+    goal = body["savings_goals"][0]
+    assert goal["progress_pct"] == 25.0
+
+
+async def test_inactive_savings_goals_excluded(auth_client):
+    created = await auth_client.post(
+        f"{API}/savings-goals",
+        json={"name": "Old Goal", "target_amount": 5000, "current_amount": 5000},
+    )
+    await auth_client.put(
+        f"{API}/savings-goals/{created.json()['id']}", json={"is_active": False}
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert body["savings_goals"] == []

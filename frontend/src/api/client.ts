@@ -164,4 +164,77 @@ export interface DashboardData {
   spending_by_category: Array<{ name: string; amount: number; color: string | null }>;
   monthly_series: Array<{ month: string; income: number; expense: number }>;
   budgets: Array<Budget & { spent: number }>;
+  net_worth: number;
+  investments: {
+    total_value: number;
+    total_cost_basis: number;
+    gain_loss: number;
+  };
+  debt: {
+    total: number;
+    by_type: Record<string, number>;
+  };
+  savings_goals: Array<{
+    id: number;
+    name: string;
+    target_amount: number;
+    current_amount: number;
+    progress_pct: number;
+    target_date: string | null;
+  }>;
+}
+
+export interface CreditCard {
+  id: number;
+  name: string;
+  balance: number;
+  credit_limit: number;
+  apr: number;
+  payment_due_date: string | null;
+  min_payment: number | null;
+  is_active: boolean;
+}
+
+export interface Debt {
+  id: number;
+  name: string;
+  type: string;
+  principal: number;
+  interest_rate: number;
+  min_payment: number | null;
+  payment_due_date: string | null;
+  remaining_term_months: number | null;
+  is_active: boolean;
+}
+
+export interface Investment {
+  id: number;
+  name: string;
+  type: string;
+  symbol: string | null;
+  cost_basis: number;
+  current_value: number;
+  account_name: string | null;
+  notes: string | null;
+}
+
+export interface SavingsGoal {
+  id: number;
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  target_date: string | null;
+  is_active: boolean;
+  notes: string | null;
+}
+
+export interface Bill {
+  id: number;
+  name: string;
+  amount: number;
+  due_date: string;
+  frequency: string;
+  auto_pay: boolean;
+  is_active: boolean;
+  notes: string | null;
 }
