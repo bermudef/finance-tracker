@@ -67,7 +67,7 @@ def run_projection(
             },
         }
 
-    real_return = expected_return - inflation_rate
+    real_return = (expected_return - inflation_rate) / 100
     annual_contrib = monthly_contribution * 12
 
     rng = random.Random(_seed_from_inputs(
@@ -85,7 +85,7 @@ def run_projection(
     for sim in range(SIMULATIONS):
         balance = current_balance
         for yr in range(years):
-            ret = _annual_return(real_return, std_dev, rng)
+            ret = _annual_return(real_return, std_dev / 100, rng)
             balance = balance * (1 + ret) + annual_contrib
             balance = max(balance, 0.0)
             paths[sim].append(balance)
