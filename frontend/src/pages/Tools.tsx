@@ -412,16 +412,20 @@ function RetirementTool() {
             <StatCard label="P90 (optimistic)" value={result.summary.p90_nominal} />
           </div>
 
-          <div className="mt-6">
+           <div className="mt-6">
             <h3 className="mb-2 text-sm font-semibold text-slate-700">
               Balance distribution by age
             </h3>
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.15} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                  <linearGradient id="outerBand" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.12} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.04} />
+                  </linearGradient>
+                  <linearGradient id="innerBand" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.22} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.08} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -429,51 +433,73 @@ function RetirementTool() {
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v / 1000}k`} />
                 <Tooltip formatter={(v) => formatCurrency(Number(v))} />
                 <Legend />
+
+                {/* 80% confidence band: p10 → p90 */}
                 <Area
                   type="monotone"
                   dataKey="p90"
                   name="P90"
                   stroke="#10b981"
-                  fill="url(#band)"
+                  fill="url(#outerBand)"
                   strokeWidth={1}
                   dot={false}
                 />
                 <Area
                   type="monotone"
+                  dataKey="p10"
+                  name="P10"
+                  stroke="none"
+                  fill="white"
+                  fillOpacity={1}
+                  dot={false}
+                />
+
+                {/* 50% IQR band: p25 → p75 */}
+                <Area
+                  type="monotone"
                   dataKey="p75"
                   name="P75"
                   stroke="#10b981"
-                  fill="transparent"
+                  fill="url(#innerBand)"
                   strokeWidth={1}
                   dot={false}
                 />
+                <Area
+                  type="monotone"
+                  dataKey="p25"
+                  name="P25"
+                  stroke="none"
+                  fill="white"
+                  fillOpacity={1}
+                  dot={false}
+                />
+
+                {/* Key percentile lines */}
                 <Line
                   type="monotone"
                   dataKey="median"
                   name="Median"
-                  stroke="#10b981"
+                  stroke="#065f46"
                   strokeWidth={2.5}
                   dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="p25"
-                  name="P25"
-                  stroke="#10b981"
-                  fill="transparent"
-                  strokeWidth={1}
-                  dot={false}
-                  strokeDasharray="4 2"
                 />
                 <Line
                   type="monotone"
                   dataKey="p10"
                   name="P10"
                   stroke="#10b981"
-                  fill="transparent"
                   strokeWidth={1}
                   dot={false}
-                  strokeDasharray="4 2"
+                  strokeDasharray="6 3"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="p90"
+                  name="P90"
+                  stroke="#10b981"
+                  strokeWidth={1}
+                  dot={false}
+                  strokeDasharray="6 3"
                 />
               </AreaChart>
             </ResponsiveContainer>
