@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ApiError } from "../api/client";
 
+const PENDING_VERIFY_KEY = "ft_pending_verify_token";
+
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -22,7 +24,12 @@ export default function RegisterPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await register(email, password, fullName || undefined);
+      const token = await register(email, password, fullName || undefined);
+      if (token) {
+        // Dev mode: keep the verification token around so the Layout banner
+        // can verify the email without re-asking the user.
+        sessionStorage.setItem(PENDING_VERIFY_KEY, token);
+      }
       navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Registration failed");

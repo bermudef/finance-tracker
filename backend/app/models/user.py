@@ -17,6 +17,8 @@ class User(Base):
     full_name = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    email_verified = Column(Boolean, default=False)  # set by the verify-email flow
+    verification_token = Column(String(64), nullable=True, index=True)  # single-use token
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

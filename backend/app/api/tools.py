@@ -20,7 +20,7 @@ from app.services.debt_payoff import compare_strategies
 from app.services.financial_assistant import answer_question
 from app.services.health_score import compute_health_score
 from app.services.retirement import run_projection
-from app.services.tax_estimation import estimate_tax
+from app.services.tax_estimation import estimate_tax, suggest_loss_harvesting
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 
@@ -218,6 +218,38 @@ async def tax_estimate(
         deductions=data.deductions,
         self_employment_income=data.self_employment_income,
     )
+
+
+@router.get("/loss-harvesting")
+async def loss_harvesting(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Suggest tax-loss harvesting candidates from the user's holdings.
+
+    Flags every investment trading below cost basis by at least $100 and
+    estimates the tax saving from realizing the loss, assuming long-term
+    capital gains rates.
+    """
+    rows = (
+        await db.execute(
+            select(Investment).where(Investment.user_id == current_user.id)
+        )
+    ).scalars().all()
+    investments = [
+        {
+            "name": r.name,
+            "symbol": r.symbol,
+            "type": r.type,
+            "cost_basis": float(r.cost_basis or 0),
+            "current_value": float(r.current_value or 0),
+        }
+        for r in rows
+    ]
+    return {
+        "candidates": suggest_loss_harvesting(investments),
+        "note": "Realized losses offset capital gains first, then up to $3,000 of ordinary income per year; the remainder carries forward.",
+    }
 
 
 class FinancialAssistantRequest(BaseModel):

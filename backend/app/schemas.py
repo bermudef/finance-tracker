@@ -73,6 +73,15 @@ class BudgetCreate(BaseModel):
     name: str
     amount: float
     period: str = "monthly"
+    rollover: bool = False
+
+
+class BudgetUpdate(BaseModel):
+    category_id: Optional[int] = None
+    name: Optional[str] = None
+    amount: Optional[float] = None
+    period: Optional[str] = None
+    rollover: Optional[bool] = None
 
 
 class BudgetOut(BaseModel):
@@ -81,6 +90,7 @@ class BudgetOut(BaseModel):
     name: str
     amount: float
     period: str
+    rollover: bool
 
     model_config = ConfigDict(from_attributes=True)
 

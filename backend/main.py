@@ -24,6 +24,7 @@ from app.api import (
     reports,
     tools,
     health,
+    recurring,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ app.include_router(tools.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(households.router, prefix="/api/v1")
+app.include_router(recurring.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

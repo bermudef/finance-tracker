@@ -190,6 +190,34 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      <Card>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-700">Net worth trend — last 12 months</h2>
+          <span className="text-xs text-slate-400">{data.net_worth_series.note}</span>
+        </div>
+        <ResponsiveContainer width="100%" height={240}>
+          <AreaChart data={data.net_worth_series.series}>
+            <defs>
+              <linearGradient id="networth" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v / 1000}k`} />
+            <Tooltip formatter={(v) => formatCurrency(Number(v))} />
+            <Area
+              type="monotone"
+              dataKey="net_worth"
+              name="Net worth"
+              stroke="#6366f1"
+              fill="url(#networth)"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </Card>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card>
           <div className="mb-4 flex items-center justify-between">
@@ -226,7 +254,8 @@ export default function DashboardPage() {
           </div>
           <ul className="divide-y divide-slate-100">
             {data.budgets.map((b) => {
-              const pct = b.amount > 0 ? (b.spent / b.amount) * 100 : 0;
+              const limit = b.effective_amount > 0 ? b.effective_amount : b.amount;
+              const pct = limit > 0 ? (b.spent / limit) * 100 : 0;
               const over = pct > 100;
               const tone = b.status === "over" ? "red" : b.status === "at_risk" ? "amber" : "green";
               const label =
@@ -237,7 +266,7 @@ export default function DashboardPage() {
                     <p className="text-sm font-medium text-slate-800">{b.name}</p>
                     <div className="flex items-center gap-2">
                       <span className="text-xs tabular-nums text-slate-500">
-                        {formatCurrency(b.spent)} / {formatCurrency(b.amount)}
+                        {formatCurrency(b.spent)} / {formatCurrency(limit)}
                       </span>
                       <Badge tone={tone}>{label}</Badge>
                     </div>
@@ -248,6 +277,11 @@ export default function DashboardPage() {
                       style={{ width: `${Math.min(pct, 100)}%` }}
                     />
                   </div>
+                  {b.rollover && b.carryover > 0 && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      +{formatCurrency(b.carryover)} carried over from last month
+                    </p>
+                  )}
                   {b.status !== "on_track" && (
                     <p className="mt-1 text-xs text-slate-500">
                       On pace to spend{" "}
@@ -256,13 +290,13 @@ export default function DashboardPage() {
                       </span>{" "}
                       this month
                       {b.status === "over" &&
-                        b.amount > 0 &&
-                        b.projected > b.amount && (
+                        limit > 0 &&
+                        b.projected > limit && (
                           <>
                             {" "}
                             —{" "}
                             <span className="font-medium text-red-600">
-                              {formatCurrency(b.projected - b.amount)} over
+                              {formatCurrency(b.projected - limit)} over
                             </span>
                           </>
                         )}

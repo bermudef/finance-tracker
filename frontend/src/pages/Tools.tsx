@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
+  toolsApi,
   type Debt,
   type DebtPayoffResult,
   type RetirementProjectionResult,
   type BudgetForecastResult,
+  type LossHarvestingResult,
 } from "../api/client";
 import { Badge, Card, StatCard } from "../components/ui";
 import { formatCurrency } from "../lib/format";
@@ -567,6 +569,89 @@ function BudgetForecastTool() {
   )
 }
 
+function LossHarvestingTool() {
+  const [result, setResult] = useState<LossHarvestingResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    setError(null)
+    toolsApi
+      .lossHarvesting()
+      .then(setResult)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(load, [load])
+
+  if (loading) return <p className="text-sm text-slate-400">Checking holdings…</p>
+  if (error) return <p className="text-sm text-red-600">Failed: {error}</p>
+  if (!result) return null
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Tax-loss harvesting suggestions</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Holdings trading below cost basis. Realizing these losses can offset
+            capital gains and up to $3,000 of ordinary income per year.
+          </p>
+        </div>
+        <button
+          onClick={load}
+          className="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {result.candidates.length === 0 ? (
+        <p className="mt-4 text-sm text-emerald-700">
+          No loss positions above $100 — nothing to harvest right now.
+        </p>
+      ) : (
+        <>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full max-w-3xl text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+                  <th className="pb-2 font-medium">Holding</th>
+                  <th className="pb-2 text-right font-medium">Cost basis</th>
+                  <th className="pb-2 text-right font-medium">Current value</th>
+                  <th className="pb-2 text-right font-medium">Unrealized loss</th>
+                  <th className="pb-2 text-right font-medium">Est. tax savings</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {result.candidates.map((c) => (
+                  <tr key={c.name + (c.symbol ?? "")}>
+                    <td className="py-2.5 font-medium text-slate-800">
+                      {c.name}
+                      {c.symbol && <span className="ml-1 text-xs text-slate-400">({c.symbol})</span>}
+                    </td>
+                    <td className="py-2.5 text-right tabular-nums text-slate-600">{formatCurrency(c.cost_basis)}</td>
+                    <td className="py-2.5 text-right tabular-nums text-slate-600">{formatCurrency(c.current_value)}</td>
+                    <td className="py-2.5 text-right font-medium tabular-nums text-red-600">
+                      −{formatCurrency(c.unrealized_loss)}
+                    </td>
+                    <td className="py-2.5 text-right tabular-nums text-emerald-600">
+                      {formatCurrency(c.est_tax_savings)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-xs text-slate-400">{result.note}</p>
+        </>
+      )}
+    </Card>
+  )
+}
+
 export default function ToolsPage() {
   const [inputs, setInputs] = useState<Inputs>(DEFAULT_INPUTS);
   const result = useMemo(() => compute(inputs), [inputs]);
@@ -586,6 +671,8 @@ export default function ToolsPage() {
       <RetirementTool />
 
       <BudgetForecastTool />
+
+      <LossHarvestingTool />
 
       <Card>
         <h2 className="text-base font-semibold text-slate-900">How much house can I afford?</h2>

@@ -29,6 +29,9 @@ interface ResourcePageProps {
   description?: string;
   path: string;
   fields: FieldConfig[];
+  /** Extra buttons rendered in the page header (e.g. CSV export). */
+  headerActions?: ReactNode;
+  onCreated?: () => void;
 }
 
 function toDisplayValue(field: FieldConfig, value: unknown): unknown {
@@ -37,7 +40,14 @@ function toDisplayValue(field: FieldConfig, value: unknown): unknown {
   return value;
 }
 
-export default function ResourcePage({ title, description, path, fields }: ResourcePageProps) {
+export default function ResourcePage({
+  title,
+  description,
+  path,
+  fields,
+  headerActions,
+  onCreated,
+}: ResourcePageProps) {
   const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -88,6 +98,7 @@ export default function ResourcePage({ title, description, path, fields }: Resou
       setForm(emptyForm());
       setShowForm(false);
       await load();
+      onCreated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create");
     } finally {
@@ -109,17 +120,20 @@ export default function ResourcePage({ title, description, path, fields }: Resou
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between">
+      <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
           {description && <p className="text-sm text-slate-500">{description}</p>}
         </div>
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-        >
-          {showForm ? "Cancel" : `+ Add ${title.replace(/s$/, "")}`}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {headerActions}
+          <button
+            onClick={() => setShowForm((s) => !s)}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            {showForm ? "Cancel" : `+ Add ${title.replace(/s$/, "")}`}
+          </button>
+        </div>
       </header>
 
       {showForm && (

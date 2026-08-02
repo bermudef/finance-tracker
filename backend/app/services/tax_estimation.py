@@ -123,3 +123,51 @@ def estimate_tax(
         marginal_rate=round(marginal_rate * 100, 1),
         quarterly_estimated=round(quarterly_estimated, 2),
     )
+
+
+# ---------- Tax-loss harvesting ----------
+
+MIN_LOSS_TO_SUGGEST = 100.0  # ignore noise-sized losses
+CAPITAL_GAINS_OFFSET_RATE = 0.15  # long-term capital gains rate (15% bracket)
+ORDINARY_INCOME_OFFSET = 3_000.0  # max capital loss deductible vs. income per year
+
+
+def suggest_loss_harvesting(investments: list[dict]) -> list[dict]:
+    """Flag holdings trading below cost basis as tax-loss harvesting candidates.
+
+    Args:
+        investments: dicts with keys ``name``, ``symbol``, ``cost_basis``,
+            ``current_value``, ``type``.
+
+    Returns:
+        Candidate holdings with unrealized loss and estimated tax savings,
+        sorted by loss size (largest first). Empty when no holding has a
+        loss above ``MIN_LOSS_TO_SUGGEST``.
+    """
+    candidates = []
+    for holding in investments:
+        cost = float(holding.get("cost_basis") or 0)
+        value = float(holding.get("current_value") or 0)
+        if cost <= 0:
+            continue
+        loss = cost - value
+        if loss < MIN_LOSS_TO_SUGGEST:
+            continue
+        # A realized loss first offsets capital gains, then up to $3,000 of
+        # ordinary income per year; the remainder carries forward. The
+        # conservative estimate below assumes long-term gain rates.
+        tax_savings = loss * CAPITAL_GAINS_OFFSET_RATE
+        candidates.append(
+            {
+                "name": holding.get("name") or holding.get("symbol") or "Holding",
+                "symbol": holding.get("symbol"),
+                "type": holding.get("type"),
+                "cost_basis": round(cost, 2),
+                "current_value": round(value, 2),
+                "unrealized_loss": round(loss, 2),
+                "est_tax_savings": round(tax_savings, 2),
+            }
+        )
+
+    candidates.sort(key=lambda c: c["unrealized_loss"], reverse=True)
+    return candidates

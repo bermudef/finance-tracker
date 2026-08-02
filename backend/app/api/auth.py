@@ -60,36 +60,64 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class RegisterResponse(TokenResponse):
+    email_verified: bool = False
+    verification_token: Optional[str] = None  # dev-only convenience
+
+
 class UserOut(BaseModel):
     id: int
     email: str
     full_name: Optional[str] = None
     is_active: bool
+    email_verified: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
 
 # ---------- Endpoints ----------
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     existing = await db.execute(select(User).where(User.email == data.email.lower()))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="Email already registered")
 
+    # Issue a single-use verification token. Production would email the link;
+    # development returns it in the response (mirrors forgot-password).
+    verification_token = secrets.token_urlsafe(32)
     user = User(
         email=data.email.lower(),
         hashed_password=hash_password(data.password),
         full_name=data.full_name,
+        verification_token=verification_token,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
 
-    return {
+    response = {
         "access_token": create_access_token(user.id),
         "refresh_token": create_refresh_token(user.id),
+        "email_verified": user.email_verified,
     }
+    if settings.app_env == "development":
+        response["verification_token"] = verification_token
+    return response
+
+
+@router.get("/verify-email")
+async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
+    """Confirm an email address using the single-use verification token."""
+    result = await db.execute(select(User).where(User.verification_token == token))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Invalid or already-used verification token")
+
+    user.email_verified = True
+    user.verification_token = None  # single use
+    await db.commit()
+    return {"status": "verified", "email": user.email}
 
 
 @router.post("/login", response_model=TokenResponse)

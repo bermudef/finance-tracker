@@ -110,6 +110,7 @@ async def generate_notifications(
     title is not re-created, so repeated calls stay idempotent."""
     items = await generate_bill_reminders(db, current_user.id)
     items += await generate_budget_alerts(db, current_user.id)
+    items += await generate_savings_milestones(db, current_user.id)
 
     existing = (
         await db.execute(
@@ -224,3 +225,75 @@ async def generate_budget_alerts(
             )
 
     return alerts
+
+
+async def generate_savings_milestones(
+    db: AsyncSession,
+    user_id: int,
+) -> list[dict]:
+    """Generate milestone alerts for savings goals.
+
+    Fires once per milestone (50%, 75%, 100%) per goal: a notification with
+    the exact milestone title is looked up across read AND unread rows, so a
+    goal that has already been celebrated is not celebrated again on the next
+    generate call.
+    """
+    from app.models.domain import SavingsGoal
+
+    goals = (
+        await db.execute(
+            select(SavingsGoal).where(
+                SavingsGoal.user_id == user_id,
+                SavingsGoal.is_active.is_(True),
+            )
+        )
+    ).scalars().all()
+
+    if not goals:
+        return []
+
+    # Titles already sent for this user, regardless of read state.
+    existing = (
+        await db.execute(
+            select(Notification.title).where(Notification.user_id == user_id)
+        )
+    ).scalars().all()
+    existing_titles = set(existing)
+
+    notifications = []
+    for goal in goals:
+        target = float(goal.target_amount or 0)
+        current = float(goal.current_amount or 0)
+        if target <= 0:
+            continue
+        pct = current / target * 100
+
+        # The highest milestone crossed, in celebration order.
+        milestone = None
+        if pct >= 100:
+            milestone = 100
+        elif pct >= 75:
+            milestone = 75
+        elif pct >= 50:
+            milestone = 50
+        if milestone is None:
+            continue
+
+        if milestone == 100:
+            title = f"Savings goal achieved: {goal.name}"
+            message = (
+                f"You've saved {current:.2f} of your {target:.2f} target for {goal.name}. "
+                f"Congratulations!"
+            )
+        else:
+            title = f"Savings goal {milestone}% reached: {goal.name}"
+            message = (
+                f"{goal.name} is {pct:.1f}% funded ({current:.2f} of {target:.2f}). "
+                f"Keep it going!"
+            )
+
+        if title in existing_titles:
+            continue
+        notifications.append({"title": title, "message": message, "type": "savings_milestone"})
+
+    return notifications

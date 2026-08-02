@@ -12,6 +12,7 @@ import {
   getAccessToken,
   storeTokens,
   type AuthTokens,
+  type RegisterResponse,
   type User,
 } from "../api/client";
 
@@ -19,7 +20,8 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName?: string) => Promise<void>;
+  /** Registers and signs in. Returns the dev verification token, if any. */
+  register: (email: string, password: string, fullName?: string) => Promise<string | null>;
   logout: () => void;
 }
 
@@ -50,14 +52,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (email: string, password: string, fullName?: string) => {
-      const tokens = await api.post<AuthTokens>("/auth/register", {
+      const result = await api.post<RegisterResponse>("/auth/register", {
         email,
         password,
         full_name: fullName || null,
       });
-      storeTokens(tokens);
+      storeTokens(result);
       const me = await api.get<User>("/auth/me");
       setUser(me);
+      // Dev builds return the verification token so the flow is exercisable
+      // end-to-end; production would email a link instead.
+      return result.verification_token;
     },
     []
   );

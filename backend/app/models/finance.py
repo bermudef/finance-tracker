@@ -67,7 +67,35 @@ class Budget(Base):
     name = Column(String(100), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     period = Column(String(20), default="monthly")  # weekly, monthly, yearly
+    rollover = Column(Boolean, default=False)  # carry unused budget into next month
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="budgets")
+    category = relationship("Category")
+
+
+class RecurringTransaction(Base):
+    """Transactions that repeat on a schedule (rent, gym, subscriptions).
+
+    Due items are materialized into the transactions table by
+    ``app.services.recurring.process_due_recurring`` — the same helper that
+    schedules bill reminders, so day-of-month overflow clamps the same way.
+    """
+
+    __tablename__ = "recurring_transactions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
+    name = Column(String(100), nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)  # positive=income, negative=expense
+    frequency = Column(String(20), nullable=False, default="monthly")  # weekly, monthly, yearly
+    next_date = Column(Date, nullable=False, index=True)  # next occurrence to post
+    is_active = Column(Boolean, default=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    account = relationship("Account")
     category = relationship("Category")

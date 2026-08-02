@@ -11,6 +11,7 @@ from app.models.database import get_db
 from app.models.domain import Investment
 from app.models.user import User
 from app.schemas import InvestmentCreate, InvestmentOut, InvestmentUpdate
+from app.services.benchmark import build_comparison
 from app.services.investment_analytics import analyze_portfolio
 
 router = APIRouter(prefix="/investments", tags=["investments"])
@@ -56,6 +57,29 @@ async def investment_analytics(
     ]
 
     return analyze_portfolio(investments)
+
+
+@router.get("/benchmark")
+async def investment_benchmark(
+    years: int = 5,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Compare the user's total investment return against the S&P 500.
+
+    ``years`` selects the lookback window (1, 3, 5, or 10 supported by the
+    bundled dataset). The user's return is measured on total cost basis,
+    which is the only historical anchor the data model has.
+    """
+    rows = (
+        await db.execute(
+            select(Investment).where(Investment.user_id == current_user.id)
+        )
+    ).scalars().all()
+    cost_basis = sum(float(r.cost_basis or 0) for r in rows)
+    current_value = sum(float(r.current_value or 0) for r in rows)
+
+    return build_comparison(cost_basis, current_value, years)
 
 
 @router.get("/{investment_id}", response_model=InvestmentOut)

@@ -146,12 +146,41 @@ export async function importTransactionsCsv(file: File): Promise<ImportResult> {
   return body as ImportResult;
 }
 
+/** Download a CSV export as a Blob (fetch with auth, no JSON parsing). */
+async function exportCsvBlob(path: string): Promise<Blob> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, `Export failed (${res.status})`);
+  return res.blob();
+}
+
+/** Trigger a browser download of a CSV export endpoint. */
+export async function downloadCsv(path: string, filename: string): Promise<void> {
+  const blob = await exportCsvBlob(path);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ---- typed domain models ----
 export interface User {
   id: number;
   email: string;
   full_name: string | null;
   is_active: boolean;
+  email_verified: boolean;
+}
+
+export interface RegisterResponse extends AuthTokens {
+  email_verified: boolean;
+  verification_token: string | null;
 }
 
 export interface Account {
@@ -190,6 +219,46 @@ export interface Budget {
   name: string;
   amount: number;
   period: string;
+  rollover: boolean;
+}
+
+export interface RecurringTransactionItem {
+  id: number;
+  user_id: number;
+  account_id: number;
+  category_id: number | null;
+  name: string;
+  amount: number;
+  frequency: "weekly" | "monthly" | "yearly";
+  next_date: string;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface BenchmarkResult {
+  years: number;
+  user_return_pct: number;
+  benchmark_return_pct: number;
+  start_month: string;
+  end_month: string;
+  series: Array<{ month: string; index: number }>;
+  note: string;
+}
+
+export interface LossHarvestingCandidate {
+  name: string;
+  symbol: string | null;
+  type: string;
+  cost_basis: number;
+  current_value: number;
+  unrealized_loss: number;
+  est_tax_savings: number;
+}
+
+export interface LossHarvestingResult {
+  candidates: LossHarvestingCandidate[];
+  note: string;
 }
 
 export interface DashboardData {
@@ -212,9 +281,19 @@ export interface DashboardData {
       status: "on_track" | "at_risk" | "over";
       days_elapsed: number;
       days_in_month: number;
+      carryover: number;
+      effective_amount: number;
+      available: number;
     }
   >;
   net_worth: number;
+  net_worth_series: {
+    months: number;
+    series: Array<{ month: string; net_worth: number }>;
+    investments_value: number;
+    debt_total: number;
+    note: string;
+  };
   investments: {
     total_value: number;
     total_cost_basis: number;
@@ -459,4 +538,40 @@ export const householdsApi = {
   pending: () => api.get<PendingHouseholdInvite[]>("/households/invites/pending"),
   accept: (token: string) =>
     api.get<{ status: string; household_id: number }>(`/households/invites/accept?token=${encodeURIComponent(token)}`),
+};
+
+export const recurringApi = {
+  list: () => api.get<RecurringTransactionItem[]>("/recurring-transactions"),
+  create: (data: {
+    name: string;
+    account_id: number;
+    category_id: number | null;
+    amount: number;
+    frequency: string;
+    next_date: string;
+    notes?: string | null;
+  }) => api.post<RecurringTransactionItem>("/recurring-transactions", data),
+  update: (id: number, data: Partial<RecurringTransactionItem>) =>
+    api.put<RecurringTransactionItem>(`/recurring-transactions/${id}`, data),
+  remove: (id: number) => api.delete<{ status: string }>(`/recurring-transactions/${id}`),
+  process: () =>
+    api.post<{ posted: number; message: string }>("/recurring-transactions/process"),
+};
+
+export const investmentsApi = {
+  benchmark: (years: number) =>
+    api.get<BenchmarkResult>(`/investments/benchmark?years=${years}`),
+};
+
+export const toolsApi = {
+  lossHarvesting: () => api.get<LossHarvestingResult>("/tools/loss-harvesting"),
+};
+
+export const authApi = {
+  register: (data: { email: string; password: string; full_name?: string }) =>
+    api.post<RegisterResponse>("/auth/register", data),
+  verifyEmail: (token: string) =>
+    api.get<{ status: string; email: string }>(
+      `/auth/verify-email?token=${encodeURIComponent(token)}`
+    ),
 };

@@ -24,6 +24,7 @@ const ToolsPage = lazy(() => import("./pages/Tools"));
 const HealthPage = lazy(() => import("./pages/Health"));
 const NotificationsPage = lazy(() => import("./pages/Notifications"));
 const HouseholdsPage = lazy(() => import("./pages/Households"));
+const RecurringPage = lazy(() => import("./pages/Recurring"));
 
 function PageFallback() {
   return <p className="p-8 text-sm text-slate-500">Loading…</p>;
@@ -92,6 +93,7 @@ export default function App() {
               <Route index element={<DashboardPage />} />
               <Route path="health" element={<HealthPage />} />
               <Route path="transactions" element={<TransactionsPage />} />
+              <Route path="recurring" element={<RecurringPage />} />
               <Route path="budgets" element={<BudgetsPage />} />
               <Route path="accounts" element={<AccountsPage />} />
               <Route path="categories" element={<CategoriesPage />} />
