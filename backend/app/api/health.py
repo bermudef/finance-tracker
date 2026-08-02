@@ -111,11 +111,13 @@ async def gather_health_metrics(db: AsyncSession, user_id: int) -> dict:
             spent_query = spent_query.where(Transaction.category_id == b.category_id)
         spent = float((await db.execute(spent_query)).scalar() or 0)
         amount = float(b.amount or 0)
-        # Project month-end spend, but only treat the projection as a live
-        # warning while there are days left in the month. On the last day the
-        # projection is final: spent >= amount is simply "over".
+        # A budget is "over" only when actual spend has exceeded the limit.
+        # Otherwise, project month-end spend: while days remain, a projected
+        # overrun is a live warning ("at risk") that can still be rescued. On
+        # the last day the projection is final, so merely being >75% used is
+        # "on track", not "at risk".
         projected = spent / days_elapsed * days_in_month if spent > 0 else 0.0
-        if amount > 0 and projected >= amount:
+        if amount > 0 and spent >= amount:
             statuses["over"] += 1
         elif amount > 0 and days_elapsed < days_in_month and projected >= 0.75 * amount:
             statuses["at_risk"] += 1

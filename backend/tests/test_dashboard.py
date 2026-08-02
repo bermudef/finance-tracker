@@ -172,8 +172,16 @@ async def test_budget_spent_tracking(auth_client):
     days_elapsed = budget["days_elapsed"]
     projected = round(150.0 / days_elapsed * days_in_month, 2)
     assert budget["projected"] == projected
+    # Status mirrors the router: over only once actual spend exceeds the
+    # budget; otherwise at risk while days remain and the projection is >=75%.
     expected_status = (
-        "over" if projected >= 300.0 else ("at_risk" if projected >= 225.0 else "on_track")
+        "over"
+        if 150.0 >= 300.0
+        else (
+            "at_risk"
+            if days_elapsed < days_in_month and projected >= 225.0
+            else "on_track"
+        )
     )
     assert budget["status"] == expected_status
 

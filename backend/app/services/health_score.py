@@ -81,8 +81,11 @@ def _score_budget_adherence(counts: dict[str, int]) -> dict[str, Any]:
         return {"score": 50.0, "detail": "No budgets set up yet"}
     # At-risk budgets count half — they may still be rescued before month-end.
     score = (counts.get("on_track", 0) + 0.5 * counts.get("at_risk", 0)) / total * 100.0
+    at_risk = counts.get("at_risk", 0)
     over = counts.get("over", 0)
     detail = f"{counts.get('on_track', 0)} of {total} budgets on track"
+    if at_risk:
+        detail += f", {at_risk} at risk"
     if over:
         detail += f", {over} over"
     return {"score": score, "detail": detail}

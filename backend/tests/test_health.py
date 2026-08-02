@@ -233,10 +233,22 @@ async def test_savings_rate_uses_positive_expense_magnitude(auth_client):
 
 
 async def test_budget_at_75pct_used_is_not_at_risk_at_month_end(auth_client):
-    """Regression: on the last day of the month a budget that has used ~90% of
-    its limit can no longer go over, so it must be 'on track' — not 'at risk'.
-    Mid-month it should still warn."""
-    from datetime import date, timedelta
+    """Regression: a budget that has used ~90% of its limit mid-month is 'at
+    risk' (the projection is still live), but on the last day of the month it
+    can no longer go over, so it must be 'on track' — not 'at risk' or 'over'.
+    The app clock is frozen so the test is deterministic on any date."""
+    from datetime import date
+    from unittest.mock import patch
+
+    class _FrozenDate(date):
+        """A datetime.date subclass whose today() returns a fixed value; all
+        arithmetic (replace, timedelta) works natively because it IS a date."""
+
+        _fixed: date | None = None
+
+        @classmethod
+        def today(cls):
+            return cls._fixed
 
     await auth_client.post(f"{API}/categories", json={"name": "Dining", "type": "expense"})
     await auth_client.post(
@@ -247,26 +259,29 @@ async def test_budget_at_75pct_used_is_not_at_risk_at_month_end(auth_client):
     cats = (await auth_client.get(f"{API}/categories")).json()
     dining = next(c for c in cats if c["name"] == "Dining")
 
-    today = date.today()
-    month_start = today.replace(day=1)
-    days_in_month = ((month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - month_start).days
-    days_elapsed = max((today - month_start).days + 1, 1)
-
     await auth_client.post(
         f"{API}/budgets",
         json={"name": "Dining", "amount": 100, "period": "monthly", "category_id": dining["id"]},
     )
+    # Transaction dated on the 1st, well inside the frozen month.
     await auth_client.post(
         f"{API}/transactions",
-        json={"account_id": checking, "category_id": dining["id"], "date": today.isoformat(), "amount": -90, "description": "Dinner"},
+        json={"account_id": checking, "category_id": dining["id"], "date": "2026-08-01",
+              "amount": -90, "description": "Dinner"},
     )
 
-    body = (await auth_client.get(f"{API}/health-score")).json()
-    detail = next(s for s in body["subscores"] if s["key"] == "budget_adherence")["detail"]
-    if days_elapsed >= days_in_month:
-        assert "on track" in detail and "at risk" not in detail
-    else:
-        assert "at risk" in detail
+    # (frozen today, expected detail fragment, unexpected fragment)
+    cases = [
+        (date(2026, 8, 15), "at risk", "over"),  # mid-month: warn, not final
+        (date(2026, 8, 31), "on track", "at risk"),  # last day: final, on track
+    ]
+    for frozen_today, expected, unexpected in cases:
+        _FrozenDate._fixed = frozen_today
+        with patch("app.api.health.date", _FrozenDate):
+            body = (await auth_client.get(f"{API}/health-score")).json()
+        detail = next(s for s in body["subscores"] if s["key"] == "budget_adherence")["detail"]
+        assert expected in detail, f"on {frozen_today}: {detail!r} should contain {expected!r}"
+        assert unexpected not in detail, f"on {frozen_today}: {detail!r} should not contain {unexpected!r}"
 
 
 async def test_health_score_isolated_per_user(auth_client, second_user_headers):
