@@ -1,7 +1,7 @@
 """Notifications CRUD — bill reminders, budget alerts, savings milestones."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
@@ -81,6 +81,66 @@ async def mark_read(
     return {"status": "ok"}
 
 
+@router.patch("/read-all")
+async def mark_all_read(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = (
+        await db.execute(
+            select(Notification).where(
+                Notification.user_id == current_user.id,
+                Notification.read.is_(False),
+            )
+        )
+    ).scalars().all()
+    for notification in rows:
+        notification.read = True
+    await db.commit()
+    return {"status": "ok", "marked": len(rows)}
+
+
+@router.post("/generate", response_model=list[NotificationOut])
+async def generate_notifications(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create notifications from live signals: bills due within a week and
+    budgets that are over or at risk. An unread notification with the same
+    title is not re-created, so repeated calls stay idempotent."""
+    items = await generate_bill_reminders(db, current_user.id)
+    items += await generate_budget_alerts(db, current_user.id)
+
+    existing = (
+        await db.execute(
+            select(Notification.title).where(
+                Notification.user_id == current_user.id,
+                Notification.read.is_(False),
+            )
+        )
+    ).scalars().all()
+    existing_titles = set(existing)
+
+    created = []
+    for item in items:
+        if item["title"] in existing_titles:
+            continue
+        notification = Notification(
+            user_id=current_user.id,
+            title=item["title"],
+            message=item["message"],
+            type=item["type"],
+        )
+        db.add(notification)
+        created.append(notification)
+
+    if created:
+        await db.commit()
+        for notification in created:
+            await db.refresh(notification)
+    return created
+
+
 @router.delete("/{notification_id}")
 async def delete_notification(
     notification_id: int,
@@ -140,12 +200,12 @@ async def generate_budget_alerts(
     user_id: int,
 ) -> list[dict]:
     """Generate budget alert notifications for over-budget categories."""
-    from app.api.dashboard import get_dashboard_data
+    from app.api.dashboard import compute_budget_statuses
 
-    dashboard = await get_dashboard_data(db, user_id)
+    budgets = await compute_budget_statuses(db, user_id)
     alerts = []
 
-    for budget in dashboard.get("budgets", []):
+    for budget in budgets:
         if budget.get("status") == "over":
             alerts.append(
                 {

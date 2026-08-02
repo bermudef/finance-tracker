@@ -16,49 +16,22 @@
 - Debt payoff optimizer (avalanche vs snowball)
 - House affordability calculator
 - Retirement projection (Monte Carlo, p10/median/p90)
+- Budget forecasting (weighted moving average, confidence intervals)
+- Investment analytics (allocation, performance, dividend yield)
+- Tax estimation (2025 federal brackets, capital gains, self-employment)
+- AI financial assistant (rule-based natural-language queries)
+- Notifications (bill reminders, budget alerts, UI + unread badge)
+- CSV import/export (transactions)
+- Multi-user support (households, invites, role-based access, UI)
 
 ## Planned Features
-
-### Budget Forecasting
-- Predict next month's spending based on historical patterns
-- Flag categories likely to exceed budget
-- Show confidence intervals
-
-### Investment Analytics
-- Portfolio allocation breakdown (sector, geography)
-- Performance vs benchmarks
-- Dividend yield tracking
-
-### Tax Estimation
-- Estimated annual tax liability
-- Tax-loss harvesting suggestions
-- Quarterly estimated tax payments
-
-### AI Financial Assistant
-- Natural-language queries ("How much did I spend on dining last month?")
-- Personalized recommendations
-- Spending pattern detection
 
 ### Plaid Bank Integration
 - Automatic transaction import
 - Balance sync
 - Account categorization
 
-### Notifications
-- Bill payment reminders
-- Budget threshold alerts
-- Savings goal milestones
-
-### CSV Import/Export
-- Export transactions, accounts, budgets
-- Import from other tools
-
 ### Mobile Application
 - React Native or Capacitor wrapper
 - Push notifications
 - Offline support
-
-### Multi-user Support
-- Household accounts
-- Shared budgets and goals
-- Role-based access control

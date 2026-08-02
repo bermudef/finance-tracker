@@ -58,6 +58,55 @@ class HouseholdInviteOut(BaseModel):
     accepted_at: Optional[datetime]
 
 
+class HouseholdMemberOut(HouseholdMembershipOut):
+    email: str
+
+
+class HouseholdInvitePendingOut(BaseModel):
+    """An invite addressed to the current user, with household name for display."""
+
+    id: int
+    household_id: int
+    household_name: str
+    email: str
+    role: str
+    token: str
+    created_at: datetime
+    expires_at: datetime
+
+
+@router.get("/invites/pending", response_model=list[HouseholdInvitePendingOut])
+async def list_pending_invites(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Invites addressed to the current user that have not been accepted yet."""
+    rows = (
+        await db.execute(
+            select(HouseholdInvite, Household.name)
+            .join(Household, Household.id == HouseholdInvite.household_id)
+            .where(
+                HouseholdInvite.email == current_user.email,
+                HouseholdInvite.accepted_at.is_(None),
+            )
+            .order_by(HouseholdInvite.created_at.desc())
+        )
+    ).all()
+    return [
+        {
+            "id": invite.id,
+            "household_id": invite.household_id,
+            "household_name": household_name,
+            "email": invite.email,
+            "role": invite.role,
+            "token": invite.token,
+            "created_at": invite.created_at,
+            "expires_at": invite.expires_at,
+        }
+        for invite, household_name in rows
+    ]
+
+
 @router.post("", response_model=HouseholdOut)
 async def create_household(
     data: HouseholdCreate,
@@ -120,7 +169,7 @@ async def get_household(
     return household
 
 
-@router.get("/{household_id}/members", response_model=list[HouseholdMembershipOut])
+@router.get("/{household_id}/members", response_model=list[HouseholdMemberOut])
 async def list_members(
     household_id: int,
     db: AsyncSession = Depends(get_db),
@@ -140,11 +189,87 @@ async def list_members(
 
     rows = (
         await db.execute(
-            select(HouseholdMembership)
+            select(HouseholdMembership, User.email)
+            .join(User, HouseholdMembership.user_id == User.id)
             .where(HouseholdMembership.household_id == household_id)
+        )
+    ).all()
+    return [
+        {
+            "id": m.id,
+            "household_id": m.household_id,
+            "user_id": m.user_id,
+            "role": m.role,
+            "joined_at": m.joined_at,
+            "email": email,
+        }
+        for m, email in rows
+    ]
+
+
+@router.get("/{household_id}/invites", response_model=list[HouseholdInviteOut])
+async def list_invites(
+    household_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List invites for a household (owner/admin only)."""
+    membership = (
+        await db.execute(
+            select(HouseholdMembership).where(
+                HouseholdMembership.household_id == household_id,
+                HouseholdMembership.user_id == current_user.id,
+                HouseholdMembership.role.in_(["owner", "admin"]),
+            )
+        )
+    ).scalar_one_or_none()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Only owners/admins can view invites")
+
+    rows = (
+        await db.execute(
+            select(HouseholdInvite)
+            .where(HouseholdInvite.household_id == household_id)
+            .order_by(HouseholdInvite.created_at.desc())
         )
     ).scalars().all()
     return rows
+
+
+@router.delete("/{household_id}/invites/{invite_id}")
+async def cancel_invite(
+    household_id: int,
+    invite_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cancel a pending invite (owner/admin only)."""
+    membership = (
+        await db.execute(
+            select(HouseholdMembership).where(
+                HouseholdMembership.household_id == household_id,
+                HouseholdMembership.user_id == current_user.id,
+                HouseholdMembership.role.in_(["owner", "admin"]),
+            )
+        )
+    ).scalar_one_or_none()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Only owners/admins can cancel invites")
+
+    invite = (
+        await db.execute(
+            select(HouseholdInvite).where(
+                HouseholdInvite.id == invite_id,
+                HouseholdInvite.household_id == household_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+
+    await db.delete(invite)
+    await db.commit()
+    return {"status": "deleted"}
 
 
 @router.post("/{household_id}/invites", response_model=HouseholdInviteOut)

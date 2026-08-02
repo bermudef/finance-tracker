@@ -1,6 +1,9 @@
 """Debt payoff simulation and endpoint tests."""
 from __future__ import annotations
 
+import os
+from datetime import date, timedelta
+
 from app.services.debt_payoff import compare_strategies, simulate_debt_payoff
 
 API = "/api/v1"
@@ -400,6 +403,65 @@ async def test_notifications_crud(auth_client):
     assert not any(n["id"] == notif_id for n in resp.json())
 
 
+async def test_notifications_generate_from_bills(auth_client):
+    """Generating reminders from live data must find bills due within a week."""
+    await auth_client.post(
+        f"{API}/bills",
+        json={
+            "name": "Netflix",
+            "amount": 15.99,
+            "due_date": (date.today() + timedelta(days=3)).isoformat(),
+            "frequency": "monthly",
+        },
+    )
+    resp = await auth_client.post(f"{API}/notifications/generate")
+    assert resp.status_code == 200
+    created = resp.json()
+    assert any(
+        n["type"] == "bill_reminder" and "Netflix" in n["title"] for n in created
+    ), f"expected a Netflix bill reminder, got {created}"
+
+    # Idempotent: generating again must not duplicate unread notifications.
+    resp = await auth_client.post(f"{API}/notifications/generate")
+    assert resp.json() == []
+
+    # Budget alert path: an over-budget category produces a budget_alert.
+    await auth_client.post(f"{API}/categories", json={"name": "Dining", "type": "expense"})
+    await auth_client.post(
+        f"{API}/accounts", json={"name": "Checking", "type": "checking", "opening_balance": 1000}
+    )
+    accounts = (await auth_client.get(f"{API}/accounts")).json()
+    cats = (await auth_client.get(f"{API}/categories")).json()
+    dining = next(c for c in cats if c["name"] == "Dining")
+    await auth_client.post(
+        f"{API}/budgets",
+        json={"name": "Dining", "amount": 100, "period": "monthly", "category_id": dining["id"]},
+    )
+    await auth_client.post(
+        f"{API}/transactions",
+        json={
+            "account_id": accounts[0]["id"],
+            "category_id": dining["id"],
+            "date": date.today().isoformat(),
+            "amount": -120,
+            "description": "Dinner",
+        },
+    )
+    resp = await auth_client.post(f"{API}/notifications/generate")
+    created = resp.json()
+    assert any(n["type"] == "budget_alert" for n in created), f"got {created}"
+
+
+async def test_notifications_mark_all_read(auth_client):
+    await auth_client.post(f"{API}/notifications", json={"title": "A", "message": "1", "type": "general"})
+    await auth_client.post(f"{API}/notifications", json={"title": "B", "message": "2", "type": "general"})
+    resp = await auth_client.patch(f"{API}/notifications/read-all")
+    assert resp.status_code == 200
+    assert resp.json()["marked"] == 2
+    body = (await auth_client.get(f"{API}/notifications")).json()
+    assert all(n["read"] for n in body)
+
+
 # ---- households tests ----
 
 
@@ -455,3 +517,106 @@ async def test_household_invite_create(auth_client):
     assert invite["email"] == "invitee@example.com"
     assert invite["role"] == "member"
     assert invite["household_id"] == household_id
+
+
+async def test_household_members_include_email(auth_client, user_data):
+    resp = await auth_client.post(f"{API}/households", json={"name": "Test"})
+    household_id = resp.json()["id"]
+    resp = await auth_client.get(f"{API}/households/{household_id}/members")
+    assert resp.status_code == 200
+    members = resp.json()
+    assert len(members) == 1
+    assert members[0]["role"] == "owner"
+    assert members[0]["email"] == user_data["email"]
+
+
+async def test_household_invite_accept_flow(client):
+    """The full lifecycle: invite by email -> invitee sees it pending -> accepts
+    -> becomes a member -> pending list clears."""
+    owner_email = f"owner_{os.urandom(4).hex()}@example.com"
+    resp = await client.post(
+        f"{API}/auth/register",
+        json={"email": owner_email, "password": "testpassword123"},
+    )
+    owner_headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    invitee_email = f"invitee_{os.urandom(4).hex()}@example.com"
+    resp = await client.post(
+        f"{API}/auth/register",
+        json={"email": invitee_email, "password": "testpassword123"},
+    )
+    invitee_headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    # Owner creates a household and invites the invitee.
+    resp = await client.post(f"{API}/households", json={"name": "Family"}, headers=owner_headers)
+    assert resp.status_code == 200
+    household_id = resp.json()["id"]
+    resp = await client.post(
+        f"{API}/households/{household_id}/invites",
+        json={"email": invitee_email, "role": "member"},
+        headers=owner_headers,
+    )
+    assert resp.status_code == 200
+
+    # Invitee sees the pending invite (with household name for display).
+    resp = await client.get(f"{API}/households/invites/pending", headers=invitee_headers)
+    assert resp.status_code == 200
+    pending = resp.json()
+    assert len(pending) == 1
+    assert pending[0]["household_name"] == "Family"
+    assert pending[0]["email"] == invitee_email
+    assert pending[0]["token"]
+
+    # Owner sees the invite in the household invite list.
+    resp = await client.get(f"{API}/households/{household_id}/invites", headers=owner_headers)
+    assert len(resp.json()) == 1
+
+    # Invitee accepts and becomes a member.
+    resp = await client.get(
+        f"{API}/households/invites/accept",
+        params={"token": pending[0]["token"]},
+        headers=invitee_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["household_id"] == household_id
+
+    resp = await client.get(f"{API}/households/{household_id}/members", headers=invitee_headers)
+    emails = [m["email"] for m in resp.json()]
+    assert invitee_email in emails and owner_email in emails
+
+    # Pending list is now empty.
+    resp = await client.get(f"{API}/households/invites/pending", headers=invitee_headers)
+    assert resp.json() == []
+
+
+async def test_household_invite_cancel_and_role_gating(auth_client, second_user_headers):
+    resp = await auth_client.post(f"{API}/households", json={"name": "Test"})
+    household_id = resp.json()["id"]
+
+    # Owner cancels a pending invite.
+    resp = await auth_client.post(
+        f"{API}/households/{household_id}/invites",
+        json={"email": "x@example.com", "role": "member"},
+    )
+    invite_id = resp.json()["id"]
+    resp = await auth_client.delete(f"{API}/households/{household_id}/invites/{invite_id}")
+    assert resp.status_code == 200
+    resp = await auth_client.get(f"{API}/households/{household_id}/invites")
+    assert resp.json() == []
+
+    # A user who is not a member cannot view or manage the invites.
+    resp = await auth_client.post(
+        f"{API}/households/{household_id}/invites",
+        json={"email": "someone@example.com", "role": "member"},
+    )
+    assert resp.status_code == 200
+    invite_id = resp.json()["id"]
+
+    resp = await auth_client.get(
+        f"{API}/households/{household_id}/invites", headers=second_user_headers
+    )
+    assert resp.status_code == 403
+    resp = await auth_client.delete(
+        f"{API}/households/{household_id}/invites/{invite_id}", headers=second_user_headers
+    )
+    assert resp.status_code == 403

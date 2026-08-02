@@ -102,6 +102,11 @@ export const api = {
     }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, {
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
@@ -386,3 +391,72 @@ export interface BudgetForecastResult {
   total_forecast: number;
   total_budget: number;
 }
+
+export interface NotificationItem {
+  id: number;
+  user_id: number;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  created_at: string;
+}
+
+export interface Household {
+  id: number;
+  name: string;
+  created_by: number;
+  created_at: string;
+}
+
+export interface HouseholdMember {
+  id: number;
+  household_id: number;
+  user_id: number;
+  role: "owner" | "admin" | "member";
+  joined_at: string;
+  email: string;
+}
+
+export interface HouseholdInvite {
+  id: number;
+  household_id: number;
+  email: string;
+  role: string;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+}
+
+export interface PendingHouseholdInvite {
+  id: number;
+  household_id: number;
+  household_name: string;
+  email: string;
+  role: string;
+  token: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export const notificationsApi = {
+  list: () => api.get<NotificationItem[]>("/notifications"),
+  generate: () => api.post<NotificationItem[]>("/notifications/generate"),
+  markRead: (id: number) => api.patch<{ status: string }>(`/notifications/${id}/read`, {}),
+  markAllRead: () => api.patch<{ status: string; marked: number }>("/notifications/read-all", {}),
+  remove: (id: number) => api.delete<{ status: string }>(`/notifications/${id}`),
+};
+
+export const householdsApi = {
+  list: () => api.get<Household[]>("/households"),
+  create: (name: string) => api.post<Household>("/households", { name }),
+  members: (householdId: number) => api.get<HouseholdMember[]>(`/households/${householdId}/members`),
+  invites: (householdId: number) => api.get<HouseholdInvite[]>(`/households/${householdId}/invites`),
+  createInvite: (householdId: number, email: string, role: string) =>
+    api.post<HouseholdInvite>(`/households/${householdId}/invites`, { email, role }),
+  cancelInvite: (householdId: number, inviteId: number) =>
+    api.delete<{ status: string }>(`/households/${householdId}/invites/${inviteId}`),
+  pending: () => api.get<PendingHouseholdInvite[]>("/households/invites/pending"),
+  accept: (token: string) =>
+    api.get<{ status: string; household_id: number }>(`/households/invites/accept?token=${encodeURIComponent(token)}`),
+};

@@ -18,6 +18,69 @@ from app.services.health_score import compute_health_score
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
+async def compute_budget_statuses(db: AsyncSession, user_id: int) -> list[dict]:
+    """Budget list with spent/projected/status for the current month.
+
+    Shared by the dashboard and the notification generator so both surfaces
+    always agree on what "on track", "at risk", and "over" mean.
+    """
+    today = date.today()
+    month_start = today.replace(day=1)
+    next_month_start = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+    budget_rows = (
+        await db.execute(select(Budget).where(Budget.user_id == user_id))
+    ).scalars().all()
+    days_in_month = (next_month_start - month_start).days
+    days_elapsed = max((today - month_start).days + 1, 1)  # today counts as a day
+    budgets = []
+    for b in budget_rows:
+        spent_query = select(func.coalesce(func.sum(-Transaction.amount), 0)).where(
+            Transaction.date >= month_start,
+            Transaction.date < next_month_start,
+            Transaction.amount < 0,
+            Transaction.user_id == user_id,
+        )
+        if b.category_id is None:
+            # A budget without a category is a general budget: it tracks
+            # every expense for the period, not just uncategorized ones.
+            pass
+        else:
+            spent_query = spent_query.where(Transaction.category_id == b.category_id)
+        spent = (await db.execute(spent_query)).scalar()
+        amount = float(b.amount)
+        # Project month-end spend from what's already been spent: if you've
+        # spent $60 of a $100 budget in the first 10 days, you're on pace to
+        # spend ~$180. That forward-looking signal drives the status badge.
+        # A budget is "over" only once actual spend exceeds the limit; a
+        # projected overrun with days remaining is "at risk". On the last day
+        # of the month the projection is final, so a budget that's merely >75%
+        # used is on track, not at risk.
+        projected = (
+            round(float(spent) / days_elapsed * days_in_month, 2)
+            if float(spent) > 0
+            else 0.0
+        )
+        if amount > 0 and float(spent) >= amount:
+            status = "over"
+        elif amount > 0 and days_elapsed < days_in_month and projected >= 0.75 * amount:
+            status = "at_risk"
+        else:
+            status = "on_track"
+        budgets.append({
+            "id": b.id,
+            "name": b.name,
+            "amount": amount,
+            "spent": round(float(spent), 2),
+            "progress_pct": round(float(spent) / amount * 100, 1) if amount > 0 else 0.0,
+            "projected": projected,
+            "status": status,
+            "days_elapsed": days_elapsed,
+            "days_in_month": days_in_month,
+        })
+    return budgets
+
+
 @router.get("")
 async def get_dashboard(
     db: AsyncSession = Depends(get_db),
@@ -148,56 +211,7 @@ async def get_dashboard(
             "expense": round(float(-exp), 2),
         })
 
-    budget_rows = (
-        await db.execute(select(Budget).where(Budget.user_id == user_id))
-    ).scalars().all()
-    days_in_month = (next_month_start - month_start).days
-    days_elapsed = max((today - month_start).days + 1, 1)  # today counts as a day
-    budgets = []
-    for b in budget_rows:
-        spent_query = select(func.coalesce(func.sum(-Transaction.amount), 0)).where(
-            Transaction.date >= month_start,
-            Transaction.date < next_month_start,
-            Transaction.amount < 0,
-            Transaction.user_id == user_id,
-        )
-        if b.category_id is None:
-            # A budget without a category is a general budget: it tracks
-            # every expense for the period, not just uncategorized ones.
-            pass
-        else:
-            spent_query = spent_query.where(Transaction.category_id == b.category_id)
-        spent = (await db.execute(spent_query)).scalar()
-        amount = float(b.amount)
-        # Project month-end spend from what's already been spent: if you've
-        # spent $60 of a $100 budget in the first 10 days, you're on pace to
-        # spend ~$180. That forward-looking signal drives the status badge.
-        # A budget is "over" only once actual spend exceeds the limit; a
-        # projected overrun with days remaining is "at risk". On the last day
-        # of the month the projection is final, so a budget that's merely >75%
-        # used is on track, not at risk.
-        projected = (
-            round(float(spent) / days_elapsed * days_in_month, 2)
-            if float(spent) > 0
-            else 0.0
-        )
-        if amount > 0 and float(spent) >= amount:
-            status = "over"
-        elif amount > 0 and days_elapsed < days_in_month and projected >= 0.75 * amount:
-            status = "at_risk"
-        else:
-            status = "on_track"
-        budgets.append({
-            "id": b.id,
-            "name": b.name,
-            "amount": amount,
-            "spent": round(float(spent), 2),
-            "progress_pct": round(float(spent) / amount * 100, 1) if amount > 0 else 0.0,
-            "projected": projected,
-            "status": status,
-            "days_elapsed": days_elapsed,
-            "days_in_month": days_in_month,
-        })
+    budgets = await compute_budget_statuses(db, user_id)
 
     # --- Wealth: investments, debt, net worth, savings goals ---
     investment_rows = (
