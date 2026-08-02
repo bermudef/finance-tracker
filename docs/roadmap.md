@@ -20,9 +20,15 @@
 - Investment analytics (allocation, performance, dividend yield)
 - Tax estimation (2025 federal brackets, capital gains, self-employment)
 - AI financial assistant (rule-based natural-language queries)
-- Notifications (bill reminders, budget alerts, UI + unread badge)
-- CSV import/export (transactions)
+- Notifications (bill reminders, budget alerts, savings-goal milestones, UI + unread badge)
+- CSV import/export (transactions, accounts, budgets)
 - Multi-user support (households, invites, role-based access, UI)
+- Recurring transactions (weekly/monthly/yearly, auto-post due items)
+- Budget rollover (unused amounts carry into next month)
+- Net worth trend (12-month monthly series on dashboard)
+- Investment benchmark (S&P 500 comparison, 1/3/5/10-year windows)
+- Tax-loss harvesting suggestions
+- Email verification (single-use token, dev banner flow)
 
 ## Planned Features
 
