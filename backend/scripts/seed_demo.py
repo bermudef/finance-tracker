@@ -2,10 +2,16 @@
 
 Idempotent: safe to run repeatedly. Usage:
 
-    DATABASE_URL=postgresql+asyncpg://finance:...@localhost:5432/finance_db \
-        ./venv/bin/python scripts/seed_demo.py
+    ./venv/bin/python scripts/seed_demo.py
 """
 from __future__ import annotations
+
+import os
+import sys
+
+# Ensure the backend directory (containing the app/ package) is importable
+# regardless of the caller's CWD.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
 from datetime import date, timedelta

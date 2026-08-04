@@ -28,31 +28,42 @@ Production-quality personal finance web application. Track income, expenses, acc
 - Python 3.9+ with a venv in `backend/venv`
 - Node 20+ with `npm ci` in `frontend`
 
-### 2. Configure
+### 2. One-Command Setup (recommended)
+
+```bash
+# Starts PostgreSQL (if needed), creates DB user/database, installs deps,
+# runs migrations, seeds demo data, and launches both servers.
+chmod +x scripts/setup_local.sh
+./scripts/setup_local.sh
+```
+
+This starts the backend on `http://localhost:8010` and the frontend on `http://localhost:5173`.
+Demo login: `test@example.com` / `testpass123`.
+
+### 2b. Manual Setup
 
 ```bash
 cp .env.example .env   # fill in JWT_SECRET_KEY, database URL, etc.
 ```
 
-### 3. Backend
+**Backend:**
 
 ```bash
 cd backend
-./venv/bin/pip install -r requirements-dev.txt
+./venv/bin/pip install -r requirements.txt
 ./venv/bin/alembic upgrade head
-./venv/bin/uvicorn main:app --host 127.0.0.1 --port 8010
+./venv/bin/uvicorn main:app --host 127.0.0.1 --port 8010   # note: main:app, not app.main:app
 ```
 
 Seed demo data (idempotent — safe to rerun):
 
 ```bash
 cd backend
-DATABASE_URL=postgresql+asyncpg://finance:...@localhost:5432/finance_db \
-  PYTHONPATH=. ./venv/bin/python scripts/seed_demo.py
+./venv/bin/python scripts/seed_demo.py
 # demo login: test@example.com / testpass123
 ```
 
-### 4. Frontend
+**Frontend:**
 
 ```bash
 cd frontend
