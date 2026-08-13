@@ -108,6 +108,45 @@ npm run dev   # http://localhost:5173, proxies /api to :8010
 - `backend` — runs `alembic upgrade head` then uvicorn on :8000
 - `frontend` — nginx serving the built SPA, reverse-proxying `/api` to the backend
 
+### Run with Docker
+
+1. Copy the environment file:
+
+```bash
+cp .env.example .env
+```
+
+2. Start the stack:
+
+```bash
+docker compose up --build
+```
+
+3. Open the app:
+
+```text
+Frontend: http://localhost:3000
+Backend API: http://localhost:8000
+```
+
+4. Seed demo data from the backend container shell if needed:
+
+```bash
+docker compose exec backend ./venv/bin/python scripts/seed_demo.py
+```
+
+5. Stop the stack:
+
+```bash
+docker compose down
+```
+
+6. Stop the stack and remove database data too:
+
+```bash
+docker compose down -v
+```
+
 For Azure App Service: push the `backend` and `frontend` images to ACR, set app settings (`DATABASE_URL`, `JWT_SECRET_KEY`, `CORS_ORIGINS`) from Key Vault references, and point the custom domain at the frontend container. `npm run build` in CI gates regressions before deploy.
 
 ## Testing
