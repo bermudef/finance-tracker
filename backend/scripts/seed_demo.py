@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.database import engine, async_session, init_db
 from app.models.finance import Account, Budget, Category, RecurringTransaction, Transaction
 from app.models.user import User
+from app.services.bills import next_occurrence
 
 import app.models.finance  # noqa: F401  register tables
 import app.models.user  # noqa: F401
@@ -678,8 +679,6 @@ async def _seed_profile(session: AsyncSession, profile: dict[str, Any]) -> None:
         if rt is None:
             continue
         anchor = date(2026, 1, min(int(item["day"]), 28))
-        from app.services.bills import next_occurrence
-
         rt.next_date = next_occurrence(anchor, rt.frequency, TODAY + timedelta(days=1))
 
     await session.commit()
