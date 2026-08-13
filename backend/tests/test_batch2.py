@@ -3,11 +3,9 @@ savings milestones, investment benchmark, net worth series, loss harvesting,
 email verification."""
 from __future__ import annotations
 
-import os
 from datetime import date, timedelta
 
 from app.services.benchmark import build_comparison, load_spx_series
-from app.services.net_worth import compute_net_worth_series
 from app.services.tax_estimation import suggest_loss_harvesting
 
 API = "/api/v1"

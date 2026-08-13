@@ -1,8 +1,8 @@
 from __future__ import annotations
-from datetime import date, datetime
+from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field
 
 
 # ---------- Accounts ----------

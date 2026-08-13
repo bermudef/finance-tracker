@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from typing import Any, Optional
+from typing import Any
 
 # How many upcoming bills to surface on the dashboard.
 DEFAULT_LIMIT = 5

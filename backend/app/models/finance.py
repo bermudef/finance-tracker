@@ -1,11 +1,10 @@
 from __future__ import annotations
 from datetime import datetime
 
-from sqlalchemy import Column, String, Float, DateTime, Text, Integer, Boolean, Date, ForeignKey, Numeric
+from sqlalchemy import Column, String, DateTime, Text, Integer, Boolean, Date, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 
 from app.models.database import Base
-from app.models.user import User
 
 
 class Account(Base):
