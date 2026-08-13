@@ -17,6 +17,17 @@ from app.models.finance import RecurringTransaction, Transaction
 from app.services.bills import latest_occurrence, next_occurrence
 
 
+async def _existing_posted(
+    db: AsyncSession, recurring_id: int, posted_date: date
+) -> bool:
+    """True if a transaction for this schedule already exists on that date."""
+    stmt = select(Transaction.id).where(
+        Transaction.recurring_id == recurring_id,
+        Transaction.date == posted_date,
+    )
+    return (await db.execute(stmt)).scalar_one_or_none() is not None
+
+
 async def process_due_recurring(
     db: AsyncSession,
     user_id: int,
@@ -47,6 +58,16 @@ async def process_due_recurring(
         # a demo/backfilled schedule materializes into the *current* period
         # instead of a stale back-dated row buried at the bottom of the feed.
         posted_date = latest_occurrence(item.next_date, item.frequency, today)
+
+        # Idempotency guard: if a transaction for this schedule already exists
+        # on the target date (e.g. the seed or a prior run already posted it),
+        # don't create a duplicate — just roll the schedule forward.
+        if await _existing_posted(db, item.id, posted_date):
+            item.next_date = next_occurrence(
+                posted_date, item.frequency, posted_date + timedelta(days=1)
+            )
+            continue
+
         created.append(
             Transaction(
                 user_id=user_id,

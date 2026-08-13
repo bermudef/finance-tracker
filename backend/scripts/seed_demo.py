@@ -415,21 +415,24 @@ async def _ensure_transaction(
     amount: float,
     description: str,
     merchant: str | None,
+    recurring_id: int | None = None,
 ) -> None:
-    exists = await session.execute(
-        select(Transaction.id).where(
-            Transaction.user_id == user.id,
-            Transaction.account_id == account.id,
-            Transaction.description == description,
-            Transaction.date == tx_date,
-        )
+    query = select(Transaction.id).where(
+        Transaction.user_id == user.id,
+        Transaction.account_id == account.id,
+        Transaction.description == description,
+        Transaction.date == tx_date,
     )
+    if recurring_id is not None:
+        query = query.where(Transaction.recurring_id == recurring_id)
+    exists = await session.execute(query)
     if exists.scalar_one_or_none() is None:
         session.add(
             Transaction(
                 user_id=user.id,
                 account_id=account.id,
                 category_id=category.id if category else None,
+                recurring_id=recurring_id,
                 date=tx_date,
                 amount=amount,
                 description=description,
@@ -444,8 +447,9 @@ async def _ensure_recurring_transaction(
     account: Account,
     category: Category | None,
     item: dict[str, Any],
-) -> None:
-    query = select(RecurringTransaction.id).where(
+    next_date: date | None = None,
+) -> RecurringTransaction:
+    query = select(RecurringTransaction).where(
         RecurringTransaction.user_id == user.id,
         RecurringTransaction.name == item["name"],
         RecurringTransaction.account_id == account.id,
@@ -455,23 +459,26 @@ async def _ensure_recurring_transaction(
     else:
         query = query.where(RecurringTransaction.category_id.is_(None))
 
-    exists = await session.execute(query)
-    if exists.scalar_one_or_none() is not None:
-        return
+    result = await session.execute(query)
+    rt = result.scalar_one_or_none()
+    if rt is not None:
+        if next_date is not None:
+            rt.next_date = next_date
+        return rt
 
-    first_due = date(2026, 1, min(int(item["day"]), 28))
-    session.add(
-        RecurringTransaction(
-            user_id=user.id,
-            account_id=account.id,
-            category_id=category.id if category else None,
-            name=item["name"],
-            amount=float(item["amount"]),
-            frequency=item.get("frequency", "monthly"),
-            next_date=first_due,
-            notes=item.get("notes"),
-        )
+    rt = RecurringTransaction(
+        user_id=user.id,
+        account_id=account.id,
+        category_id=category.id if category else None,
+        name=item["name"],
+        amount=float(item["amount"]),
+        frequency=item.get("frequency", "monthly"),
+        next_date=next_date or date(2026, 1, min(int(item["day"]), 28)),
+        notes=item.get("notes"),
     )
+    session.add(rt)
+    await session.flush()
+    return rt
 
 
 async def _reset_profile_data(session: AsyncSession, user: User) -> None:
@@ -579,6 +586,20 @@ async def _seed_profile(session: AsyncSession, profile: dict[str, Any]) -> None:
             auto_pay=auto_pay,
         )
 
+    # Create recurring schedules up front so historical postings can be linked
+    # to them (recurring_id) and next_date can be rolled past TODAY. Without
+    # this, the login-time auto-post would create a *second* transaction for
+    # the current month's recurring payment, double-counting expenses.
+    recurring_by_name: dict[str, RecurringTransaction] = {}
+    for item in profile.get("recurring_transactions", []):
+        account = accounts.get(item["account"])
+        category = categories.get(item["category"])
+        if account is None:
+            continue
+        recurring_by_name[item["name"]] = await _ensure_recurring_transaction(
+            session, user, account, category, item
+        )
+
     month_cursor = START_DATE.replace(day=1)
     month_index = 0
     while month_cursor <= date(TODAY.year, TODAY.month, 1):
@@ -616,7 +637,8 @@ async def _seed_profile(session: AsyncSession, profile: dict[str, Any]) -> None:
         for item in profile.get("recurring_transactions", []):
             account = accounts.get(item["account"])
             category = categories.get(item["category"])
-            if account is None:
+            rt = recurring_by_name.get(item["name"])
+            if account is None or rt is None:
                 continue
             tx_date = date(month_cursor.year, month_cursor.month, min(int(item["day"]), 28))
             if tx_date > TODAY:
@@ -639,19 +661,26 @@ async def _seed_profile(session: AsyncSession, profile: dict[str, Any]) -> None:
                 category,
                 tx_date,
                 signed_amount,
+                f"Recurring: {item['name']}",
                 item["name"],
-                None,
+                recurring_id=rt.id,
             )
 
         month_cursor = date(month_cursor.year + (month_cursor.month // 12), ((month_cursor.month % 12) + 1), 1)
         month_index += 1
 
+    # Roll each schedule's next_date to the next occurrence strictly after
+    # TODAY, since historical occurrences (including this month's) have already
+    # been posted above. This keeps the seed consistent with the login-time
+    # auto-post (no double-counting) and with process_due_recurring's roll-forward.
     for item in profile.get("recurring_transactions", []):
-        account = accounts.get(item["account"])
-        category = categories.get(item["category"])
-        if account is None:
+        rt = recurring_by_name.get(item["name"])
+        if rt is None:
             continue
-        await _ensure_recurring_transaction(session, user, account, category, item)
+        anchor = date(2026, 1, min(int(item["day"]), 28))
+        from app.services.bills import next_occurrence
+
+        rt.next_date = next_occurrence(anchor, rt.frequency, TODAY + timedelta(days=1))
 
     await session.commit()
     print(f"Seeded user {user.email} (password: {profile['password']})")

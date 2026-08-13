@@ -134,6 +134,45 @@ async def test_recurring_inactive_items_are_skipped(auth_client):
     assert process.json()["posted"] == 0
 
 
+async def test_process_does_not_duplicate_existing_occurrence(auth_client):
+    """If the current period's occurrence is already posted for a schedule
+    (e.g. the seed backfilled it), processing must not post a second row that
+    would double-count expenses like mortgage + car + utilities."""
+    account_id, _ = await _setup_account_category(auth_client)
+
+    create = await auth_client.post(
+        f"{API}/recurring-transactions",
+        json={
+            "name": "Internet",
+            "account_id": account_id,
+            "amount": -60.0,
+            "frequency": "monthly",
+            "next_date": (date.today() - timedelta(days=30)).isoformat(),
+        },
+    )
+    assert create.status_code == 201, create.text
+    item_id = create.json()["id"]
+
+    # First processing run posts the current-period occurrence.
+    first = await auth_client.post(f"{API}/recurring-transactions/process")
+    assert first.status_code == 200, first.text
+    assert first.json()["posted"] == 1
+
+    txs = await auth_client.get(f"{API}/transactions")
+    internet = [t for t in txs.json() if t.get("merchant") == "Internet"]
+    assert len(internet) == 1
+    assert internet[0]["recurring_id"] == item_id
+    posted_date = internet[0]["date"]
+
+    # Simulate the seed/reseed path: a transaction already exists for the
+    # schedule on that date. Reprocessing must not create a duplicate.
+    await auth_client.post(f"{API}/recurring-transactions/process")
+    txs = await auth_client.get(f"{API}/transactions")
+    internet = [t for t in txs.json() if t.get("merchant") == "Internet"]
+    assert len(internet) == 1
+    assert internet[0]["date"] == posted_date
+
+
 async def test_due_recurring_auto_posts_on_login(client, user_data):
     """Due recurring items materialize into transactions when the user logs in,
     so recurring payments show up in the transactions feed without a manual
