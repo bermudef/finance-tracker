@@ -57,15 +57,24 @@ cd backend
 
 ### Demo household accounts
 
-The seeded demo data includes three households with different financial situations. Use the email as the username when logging in:
+The seeded demo data includes three households with different financial situations.
 
-- `parker.family@example.com` / `ParkerFamily!2025` — stable, high-income household with low debt and strong savings
-- `nguyen.family@example.com` / `NguyenFamily!2025` — growing household with moderate income, childcare costs, and manageable debt
-- `garcia.family@example.com` / `GarciaFamily!2025` — stretched household with higher debt, lower savings, and tighter cash flow
+Use these credentials when logging in:
+
+- Username: `parker.family@example.com`
+  Password: `ParkerFamily!2025`
+  Profile: stable, high-income household with low debt and strong savings
+- Username: `nguyen.family@example.com`
+  Password: `NguyenFamily!2025`
+  Profile: growing household with moderate income, childcare costs, and manageable debt
+- Username: `garcia.family@example.com`
+  Password: `GarciaFamily!2025`
+  Profile: stretched household with higher debt, lower savings, and tighter cash flow
 
 For the original test account used during project setup, the legacy demo login remains:
 
-- `test@example.com` / `testpass123`
+- Username: `test@example.com`
+  Password: `testpass123`
 
 ### 2b. Manual Setup
 
