@@ -6,12 +6,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.models.database import get_db
-from app.models.finance import Account, Category, RecurringTransaction, Transaction
+from app.models.finance import Account, Category, RecurringTransaction
 from app.models.user import User
 from app.services.recurring import list_recurring, process_due_recurring
 

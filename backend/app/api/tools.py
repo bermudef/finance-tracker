@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, timedelta
-from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -18,7 +17,6 @@ from app.models.user import User
 from app.services.budget_forecast import forecast, month_key
 from app.services.debt_payoff import compare_strategies
 from app.services.financial_assistant import answer_question
-from app.services.health_score import compute_health_score
 from app.services.retirement import run_projection
 from app.services.tax_estimation import estimate_tax, suggest_loss_harvesting
 
@@ -269,17 +267,15 @@ async def financial_assistant(
     and generates a contextual response with actionable guidance.
     """
     # Fetch the user's dashboard data for context
-    from app.api.dashboard import get_dashboard
 
     # Build a mock request to get dashboard data
-    from fastapi import Request
 
     # We need the dashboard data, so let's fetch it directly
     today = date.today()
     month_start = today.replace(day=1)
     next_month_start = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
 
-    from sqlalchemy import func, select as sqla_select
+    from sqlalchemy import select as sqla_select
 
     # Get accounts
     account_rows = (

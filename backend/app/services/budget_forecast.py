@@ -6,9 +6,7 @@ exceed their budget are flagged with a confidence level.
 """
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import date
-from typing import Optional
 
 MONTHS_TO_ANALYZE = 6
 # Weights for the weighted moving average: more recent months get higher weight.

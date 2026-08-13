@@ -17,7 +17,7 @@ tested exhaustively.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 MINIMUM_PAYMENT_FLOOR = 25.0  # debts without a stated minimum still amortize
 MAX_MONTHS = 2400  # 200 years — guards against non-converging inputs

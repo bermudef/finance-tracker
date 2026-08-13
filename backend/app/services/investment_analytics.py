@@ -7,8 +7,6 @@ user's investment holdings.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, timedelta
-from typing import Optional
 
 
 def compute_allocation(

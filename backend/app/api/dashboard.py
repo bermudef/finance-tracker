@@ -1,6 +1,5 @@
 from __future__ import annotations
-from typing import Optional
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, func
@@ -10,7 +9,7 @@ from app.api.deps import get_current_user
 from app.api.health import gather_health_metrics
 from app.models.database import get_db
 from app.models.domain import Bill, CreditCard, Debt, Investment, SavingsGoal
-from app.models.finance import Account, Budget, Category, Transaction
+from app.models.finance import Account, Category, Transaction
 from app.models.user import User
 from app.services.bills import upcoming_bills
 from app.services.budget_status import compute_budget_statuses
@@ -28,7 +27,6 @@ async def get_dashboard(
     user_id = current_user.id
     today = date.today()
     month_start = today.replace(day=1)
-    next_month_start = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
     last_month_start = (month_start - timedelta(days=1)).replace(day=1)
 
     balance_rows = (
