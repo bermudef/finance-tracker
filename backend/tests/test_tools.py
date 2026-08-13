@@ -477,7 +477,7 @@ async def test_household_create_and_list(auth_client):
     body = resp.json()
     assert body["name"] == "Test Family"
     assert body["created_by"] == auth_client.user_id if hasattr(auth_client, "user_id") else True
-    household_id = body["id"]
+    assert body["id"]
 
     # List households
     resp = await auth_client.get(f"{API}/households")

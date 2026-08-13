@@ -16,7 +16,6 @@ os.environ["DATABASE_URL"] = (
     "postgresql+asyncpg://finance:finance_dev_password@localhost:5432/finance_test_db"
 )
 
-import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 

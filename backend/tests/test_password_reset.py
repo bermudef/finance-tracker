@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import pytest
 from sqlalchemy import select
 
 API = "/api/v1"

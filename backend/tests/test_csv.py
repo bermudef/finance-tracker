@@ -118,7 +118,7 @@ async def test_import_skips_bad_rows_and_reports_them(auth_client):
         "2026-07-01,-10,ok,,\n"
         "not-a-date,-5,bad-date,,\n"
         "2026-07-01,0,zero-amount,,\n"
-        f"2026-07-01,-10,no-such-cat,nope,,\n"
+        "2026-07-01,-10,no-such-cat,nope,,\n"
         "2026-07-01,-10,no-such-account,,nope\n",
     )
     assert resp.status_code == 200
