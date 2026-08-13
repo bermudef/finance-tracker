@@ -44,6 +44,13 @@ This starts the backend on `http://localhost:8010` and the frontend on `http://l
 
 The seeded demo data starts on `2026-01-01` and continues through the present day so each household’s balances, debts, and transactions reflect a realistic year-to-date picture.
 
+If you pull new backend changes later, rerun the database migration before starting the app so schema updates (for example, recurring transaction auto-pay fields) are applied:
+
+```bash
+cd backend
+./venv/bin/alembic upgrade head
+```
+
 ### Demo household accounts
 
 The seeded demo data includes three households with different financial situations. Use the email as the username when logging in:
@@ -82,6 +89,8 @@ cd backend
 # garcia.family@example.com / GarciaFamily!2025
 # legacy test account: test@example.com / testpass123
 ```
+
+After reseeding, restart the backend so updated demo profile data and API changes are reflected in the running app.
 
 **Frontend:**
 
