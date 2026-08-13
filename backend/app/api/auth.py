@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +16,32 @@ from app.core.security import create_access_token, create_refresh_token, hash_pa
 from app.models.database import get_db
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User
+from app.services.recurring import process_due_recurring
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    """Persist auth tokens in secure cookies while preserving JSON responses for API clients."""
+    secure = settings.app_env not in {"development", "test"}
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+        max_age=settings.access_token_expire_minutes * 60,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+    )
 
 
 # ---------- Schemas ----------
@@ -78,7 +102,11 @@ class UserOut(BaseModel):
 # ---------- Endpoints ----------
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
-async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    data: RegisterRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     existing = await db.execute(select(User).where(User.email == data.email.lower()))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="Email already registered")
@@ -96,14 +124,15 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(user)
 
-    response = {
+    response_payload = {
         "access_token": create_access_token(user.id),
         "refresh_token": create_refresh_token(user.id),
         "email_verified": user.email_verified,
     }
     if settings.app_env == "development":
-        response["verification_token"] = verification_token
-    return response
+        response_payload["verification_token"] = verification_token
+    set_auth_cookies(response, response_payload["access_token"], response_payload["refresh_token"])
+    return response_payload
 
 
 @router.get("/verify-email")
@@ -121,16 +150,23 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(
+    data: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(User).where(User.email == data.email.lower()))
     user = result.scalar_one_or_none()
     if user is None or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
-    return {
+    token_payload = {
         "access_token": create_access_token(user.id),
         "refresh_token": create_refresh_token(user.id),
     }
+    set_auth_cookies(response, token_payload["access_token"], token_payload["refresh_token"])
+    await process_due_recurring(db, user.id)
+    return token_payload
 
 
 @router.get("/me", response_model=UserOut)
@@ -139,7 +175,11 @@ async def me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh(
+    data: RefreshRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     """Rotate a valid refresh token into a new access + refresh pair."""
     try:
         payload = jwt.decode(
@@ -157,10 +197,12 @@ async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
 
-    return {
+    token_payload = {
         "access_token": create_access_token(user.id),
         "refresh_token": create_refresh_token(user.id),
     }
+    set_auth_cookies(response, token_payload["access_token"], token_payload["refresh_token"])
+    return token_payload
 
 
 # ---------- Password reset ----------

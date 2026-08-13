@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.models.database import get_db
-from app.models.finance import Account, Category, Transaction
+from app.models.finance import Account, Category, RecurringTransaction, Transaction
 from app.models.user import User
 from app.schemas import TransactionCreate, TransactionOut
 
@@ -58,21 +58,29 @@ async def list_transactions(
 
     account_names = {}
     category_names = {}
+    recurring_names = {}
     if txs:
         account_ids = {t.account_id for t in txs}
         category_ids = {t.category_id for t in txs if t.category_id}
+        recurring_ids = {t.recurring_id for t in txs if t.recurring_id}
         if account_ids:
             acc_result = await db.execute(select(Account).where(Account.id.in_(account_ids)))
             account_names = {a.id: a.name for a in acc_result.scalars()}
         if category_ids:
             cat_result = await db.execute(select(Category).where(Category.id.in_(category_ids)))
             category_names = {c.id: c.name for c in cat_result.scalars()}
+        if recurring_ids:
+            rec_result = await db.execute(
+                select(RecurringTransaction).where(RecurringTransaction.id.in_(recurring_ids))
+            )
+            recurring_names = {r.id: r.name for r in rec_result.scalars()}
 
     out = []
     for t in txs:
         item = TransactionOut.model_validate(t)
         item.account_name = account_names.get(t.account_id)
         item.category_name = category_names.get(t.category_id)
+        item.recurring_name = recurring_names.get(t.recurring_id) if t.recurring_id else None
         out.append(item)
     return out
 

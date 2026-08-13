@@ -38,7 +38,20 @@ chmod +x scripts/setup_local.sh
 ```
 
 This starts the backend on `http://localhost:8010` and the frontend on `http://localhost:5173`.
-Demo login: `test@example.com` / `testpass123`.
+
+The seeded demo data starts on `2026-01-01` and continues through the present day so each household’s balances, debts, and transactions reflect a realistic year-to-date picture.
+
+### Demo household accounts
+
+The seeded demo data includes three households with different financial situations. Use the email as the username when logging in:
+
+- `parker.family@example.com` / `ParkerFamily!2025` — stable, high-income household with low debt and strong savings
+- `nguyen.family@example.com` / `NguyenFamily!2025` — growing household with moderate income, childcare costs, and manageable debt
+- `garcia.family@example.com` / `GarciaFamily!2025` — stretched household with higher debt, lower savings, and tighter cash flow
+
+For the original test account used during project setup, the legacy demo login remains:
+
+- `test@example.com` / `testpass123`
 
 ### 2b. Manual Setup
 
@@ -60,7 +73,11 @@ Seed demo data (idempotent — safe to rerun):
 ```bash
 cd backend
 ./venv/bin/python scripts/seed_demo.py
-# demo login: test@example.com / testpass123
+# demo logins:
+# parker.family@example.com / ParkerFamily!2025
+# nguyen.family@example.com / NguyenFamily!2025
+# garcia.family@example.com / GarciaFamily!2025
+# legacy test account: test@example.com / testpass123
 ```
 
 **Frontend:**

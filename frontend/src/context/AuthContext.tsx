@@ -9,7 +9,6 @@ import {
 import {
   api,
   clearTokens,
-  getAccessToken,
   storeTokens,
   type AuthTokens,
   type RegisterResponse,
@@ -32,14 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!getAccessToken()) {
-      setLoading(false);
-      return;
-    }
     api
       .get<User>("/auth/me")
       .then(setUser)
-      .catch(() => clearTokens())
+      .catch(() => {
+        clearTokens();
+        setUser(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 

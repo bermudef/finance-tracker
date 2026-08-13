@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.finance import RecurringTransaction, Transaction
-from app.services.bills import next_occurrence
+from app.services.bills import latest_occurrence, next_occurrence
 
 
 async def process_due_recurring(
@@ -43,12 +43,16 @@ async def process_due_recurring(
 
     created = []
     for item in rows:
-        posted_date = item.next_date
+        # Post on the schedule's most recent occurrence on or before today, so
+        # a demo/backfilled schedule materializes into the *current* period
+        # instead of a stale back-dated row buried at the bottom of the feed.
+        posted_date = latest_occurrence(item.next_date, item.frequency, today)
         created.append(
             Transaction(
                 user_id=user_id,
                 account_id=item.account_id,
                 category_id=item.category_id,
+                recurring_id=item.id,
                 date=posted_date,
                 amount=item.amount,
                 description=f"Recurring: {item.name}",

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
+import Emblem from "../components/Emblem";
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -44,7 +45,8 @@ export default function ResetPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-sm">
-        <h1 className="mb-6 text-center text-2xl font-bold text-slate-900">
+        <h1 className="mb-6 flex flex-col items-center gap-2 text-2xl font-bold text-slate-900">
+          <Emblem className="h-10 w-10" />
           Finance<span className="text-emerald-600">Tracker</span>
         </h1>
         <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">

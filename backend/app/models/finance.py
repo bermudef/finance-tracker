@@ -46,6 +46,7 @@ class Transaction(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
+    recurring_id = Column(Integer, ForeignKey("recurring_transactions.id"), nullable=True, index=True)
     date = Column(Date, nullable=False, index=True)
     amount = Column(Numeric(12, 2), nullable=False)  # positive=income, negative=expense
     description = Column(String(255), nullable=True)

@@ -40,3 +40,12 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+if settings.app_env not in {"development", "test"} and settings.jwt_secret_key in {
+    "",
+    "change-me-to-a-long-random-string",
+}:
+    raise RuntimeError(
+        "JWT_SECRET_KEY must be set to a strong secret in production-like environments."
+    )

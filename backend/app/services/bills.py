@@ -67,6 +67,38 @@ def next_occurrence(due_date: date, frequency: str, today: date) -> date:
     return due_date  # unknown/one-off frequency: keep the stored date
 
 
+def _prev_month(candidate: date, anchor_day: int) -> date:
+    year = candidate.year - (1 if candidate.month == 1 else 0)
+    month = 12 if candidate.month == 1 else candidate.month - 1
+    return date(year, month, min(anchor_day, _days_in_month(year, month)))
+
+
+def latest_occurrence(due_date: date, frequency: str, today: date) -> date:
+    """Return the most recent occurrence that falls on or before `today`.
+
+    Used when materializing an overdue recurring schedule: instead of posting
+    on the stale stored date, post on the schedule's last actual due date so
+    the transaction shows up in the current period. Returns ``due_date``
+    itself for unknown/one-off frequencies.
+    """
+    upcoming = next_occurrence(due_date, frequency, today)
+
+    if upcoming == today:
+        return upcoming  # due exactly today
+
+    if frequency == "weekly":
+        return upcoming - timedelta(days=7)
+
+    if frequency == "monthly":
+        return _prev_month(upcoming, due_date.day)
+
+    if frequency == "yearly":
+        year = upcoming.year - 1
+        return date(year, upcoming.month, min(due_date.day, _days_in_month(year, upcoming.month)))
+
+    return due_date
+
+
 def upcoming_bills(
     bills: list[Any], today: date, limit: int = DEFAULT_LIMIT
 ) -> list[dict[str, Any]]:

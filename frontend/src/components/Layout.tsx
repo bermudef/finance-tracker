@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { authApi, notificationsApi } from "../api/client";
+import Emblem from "./Emblem";
 
 const PENDING_VERIFY_KEY = "ft_pending_verify_token";
 
@@ -92,7 +93,8 @@ export default function Layout() {
         </div>
       )}
       <aside className="hidden w-56 flex-col border-r border-slate-200 bg-white p-4 md:flex">
-        <div className="mb-6 px-2 text-lg font-bold text-slate-900">
+        <div className="mb-6 flex items-center gap-2 px-2 text-lg font-bold text-slate-900">
+          <Emblem />
           Finance<span className="text-emerald-600">Tracker</span>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">

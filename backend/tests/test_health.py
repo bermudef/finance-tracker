@@ -97,6 +97,16 @@ def test_no_cards_is_neutral_not_punished():
     assert credit["score"] == 70.0
 
 
+def test_cards_without_limits_are_neutral_not_zero():
+    """Regression: a card with no reported limit is a data gap, not a 0-score."""
+    result = compute_health_score(
+        _perfect_metrics(credit_balance=500.0, credit_limit=0.0, credit_cards_count=2)
+    )
+    credit = next(s for s in result["subscores"] if s["key"] == "credit_utilization")
+    assert credit["score"] == 50.0
+    assert "no reported limits" in credit["detail"]
+
+
 def test_no_budgets_and_no_goals_are_neutral():
     result = compute_health_score(
         _perfect_metrics(
@@ -123,6 +133,77 @@ def test_recommendations_target_weakest_components_first():
     assert keys[:3] == ["savings_rate", "emergency_fund", "debt_burden"]
     assert len(result["recommendations"]) <= 4
     assert all(r["text"] for r in result["recommendations"])
+
+
+def test_savings_rate_over_75_is_on_track():
+    """Savings rate must score strictly over 75 to be 'on track' (no
+    recommendation). 15% saved scores 75 -> still flagged; 16% scores 80 -> ok."""
+    at_threshold = compute_health_score(_perfect_metrics(monthly_expense=6800.0))  # 15% saved
+    assert "savings_rate" in [r["key"] for r in at_threshold["recommendations"]]
+    above = compute_health_score(_perfect_metrics(monthly_expense=6720.0))  # 16% saved
+    assert "savings_rate" not in [r["key"] for r in above["recommendations"]]
+
+
+def test_credit_utilization_status_follows_utilization_bands():
+    """Credit utilization status is judged on the utilization ratio, not the
+    normalized score (which is already 100 for anything at/under 30%):
+        < 25%  -> on track
+        25-30% -> at risk
+        > 30%  -> over
+    """
+    on_track = compute_health_score(
+        _perfect_metrics(credit_balance=4800.0, credit_limit=20000.0)  # 24% -> on track
+    )
+    credit = next(s for s in on_track["subscores"] if s["key"] == "credit_utilization")
+    assert credit["status"] == "on_track"
+    assert "credit_utilization" not in [r["key"] for r in on_track["recommendations"]]
+
+    at_risk = compute_health_score(
+        _perfect_metrics(credit_balance=5200.0, credit_limit=20000.0)  # 26% -> at risk
+    )
+    credit = next(s for s in at_risk["subscores"] if s["key"] == "credit_utilization")
+    assert credit["status"] == "at_risk"
+    assert credit["score"] == 100.0  # score still reads perfect at 26%
+    assert "credit_utilization" in [r["key"] for r in at_risk["recommendations"]]
+
+    boundary = compute_health_score(
+        _perfect_metrics(credit_balance=6000.0, credit_limit=20000.0)  # exactly 30% -> at risk
+    )
+    credit = next(s for s in boundary["subscores"] if s["key"] == "credit_utilization")
+    assert credit["status"] == "at_risk"
+
+    over = compute_health_score(
+        _perfect_metrics(credit_balance=6400.0, credit_limit=20000.0)  # 32% -> over
+    )
+    credit = next(s for s in over["subscores"] if s["key"] == "credit_utilization")
+    assert credit["status"] == "over"
+    assert "credit_utilization" in [r["key"] for r in over["recommendations"]]
+
+
+def test_credit_utilization_over_75_is_on_track():
+    """Credit utilization must score strictly over 75 to be 'on track'. 37.5%
+    utilization scores exactly 75 -> still flagged; 25% scores 100 -> ok."""
+    at_boundary = compute_health_score(
+        _perfect_metrics(credit_balance=7500.0, credit_limit=20000.0)  # 37.5% -> score 75
+    )
+    assert "credit_utilization" in [r["key"] for r in at_boundary["recommendations"]]
+    under_util = compute_health_score(
+        _perfect_metrics(credit_balance=4000.0, credit_limit=20000.0)  # 20% -> on track
+    )
+    assert "credit_utilization" not in [r["key"] for r in under_util["recommendations"]]
+
+
+def test_emergency_fund_over_75_is_on_track():
+    """Emergency fund must score strictly over 75 to be 'on track'. 4.5 months
+    scores exactly 75 -> still flagged; 5 months scores ~83 -> ok."""
+    at_boundary = compute_health_score(
+        _perfect_metrics(liquid_assets=18000.0)  # 4.5 months -> score 75
+    )
+    assert "emergency_fund" in [r["key"] for r in at_boundary["recommendations"]]
+    funded = compute_health_score(
+        _perfect_metrics(liquid_assets=20000.0)  # 5 months -> score ~83
+    )
+    assert "emergency_fund" not in [r["key"] for r in funded["recommendations"]]
 
 
 def test_grade_bands():
@@ -232,11 +313,12 @@ async def test_savings_rate_uses_positive_expense_magnitude(auth_client):
     assert "95%" in savings["detail"]
 
 
-async def test_budget_at_75pct_used_is_not_at_risk_at_month_end(auth_client):
-    """Regression: a budget that has used ~90% of its limit mid-month is 'at
-    risk' (the projection is still live), but on the last day of the month it
-    can no longer go over, so it must be 'on track' — not 'at risk' or 'over'.
-    The app clock is frozen so the test is deterministic on any date."""
+async def test_budget_status_driven_by_actual_spend(auth_client):
+    """Regression: status is judged by actual spend against the limit, not by a
+    linear projection. A budget under its limit is 'on track' even if the
+    projection suggests an overrun; once spend reaches/exceeds the limit it is
+    'at risk' regardless of the date. The app clock is frozen so the test is
+    deterministic on any date."""
     from datetime import date
     from unittest.mock import patch
 
@@ -263,7 +345,8 @@ async def test_budget_at_75pct_used_is_not_at_risk_at_month_end(auth_client):
         f"{API}/budgets",
         json={"name": "Dining", "amount": 100, "period": "monthly", "category_id": dining["id"]},
     )
-    # Transaction dated on the 1st, well inside the frozen month.
+    # Transaction dated on the 1st, well inside the frozen month: 90% of the
+    # budget spent, but still under the limit, so it must stay 'on track'.
     await auth_client.post(
         f"{API}/transactions",
         json={"account_id": checking, "category_id": dining["id"], "date": "2026-08-01",
@@ -272,8 +355,8 @@ async def test_budget_at_75pct_used_is_not_at_risk_at_month_end(auth_client):
 
     # (frozen today, expected detail fragment, unexpected fragment)
     cases = [
-        (date(2026, 8, 15), "at risk", "over"),  # mid-month: warn, not final
-        (date(2026, 8, 31), "on track", "at risk"),  # last day: final, on track
+        (date(2026, 8, 15), "on track", "at risk"),  # under limit: on track, not at risk
+        (date(2026, 8, 31), "on track", "at risk"),  # last day: still under limit
     ]
     for frozen_today, expected, unexpected in cases:
         _FrozenDate._fixed = frozen_today
@@ -282,6 +365,18 @@ async def test_budget_at_75pct_used_is_not_at_risk_at_month_end(auth_client):
         detail = next(s for s in body["subscores"] if s["key"] == "budget_adherence")["detail"]
         assert expected in detail, f"on {frozen_today}: {detail!r} should contain {expected!r}"
         assert unexpected not in detail, f"on {frozen_today}: {detail!r} should not contain {unexpected!r}"
+
+    # Once spend reaches the limit, the budget is 'at risk' on any date.
+    await auth_client.post(
+        f"{API}/transactions",
+        json={"account_id": checking, "category_id": dining["id"], "date": "2026-08-05",
+              "amount": -15, "description": "More dinner"},
+    )
+    _FrozenDate._fixed = date(2026, 8, 31)
+    with patch("app.api.health.date", _FrozenDate):
+        body = (await auth_client.get(f"{API}/health-score")).json()
+    detail = next(s for s in body["subscores"] if s["key"] == "budget_adherence")["detail"]
+    assert "at risk" in detail, f"over-limit budget should be at risk: {detail!r}"
 
 
 async def test_health_score_isolated_per_user(auth_client, second_user_headers):
@@ -292,3 +387,77 @@ async def test_health_score_isolated_per_user(auth_client, second_user_headers):
     assert resp2.status_code == 200
     # Different users can have different scores — the second user has no data.
     assert resp2.json()["recommendations"] != resp.json()["recommendations"]
+
+
+async def test_inactive_credit_cards_excluded_from_health(auth_client):
+    """Regression: a deactivated card must not drag down credit utilization,
+    debt burden, or the card count."""
+    card = await auth_client.post(
+        f"{API}/credit-cards",
+        json={"name": "Old Card", "balance": 9000, "credit_limit": 10000, "apr": 20,
+              "min_payment": 250},
+    )
+    await auth_client.put(
+        f"{API}/credit-cards/{card.json()['id']}", json={"is_active": False}
+    )
+    body = (await auth_client.get(f"{API}/health-score")).json()
+    credit = next(s for s in body["subscores"] if s["key"] == "credit_utilization")
+    debt = next(s for s in body["subscores"] if s["key"] == "debt_burden")
+    # No active cards -> neutral credit score, no debt payments recorded.
+    assert credit["score"] == 70.0
+    assert debt["detail"] == "No income to measure debt load against"
+
+
+async def test_emergency_fund_not_inflated_for_new_users(auth_client):
+    """Regression: the 3-month expense average must not be diluted by empty
+    months for a user with only one month of history (previously inflated the
+    emergency-fund score ~3x)."""
+    from datetime import date
+
+    today = date.today()
+    await auth_client.post(f"{API}/categories", json={"name": "Salary", "type": "income"})
+    await auth_client.post(f"{API}/categories", json={"name": "Rent", "type": "expense"})
+    await auth_client.post(
+        f"{API}/accounts", json={"name": "Checking", "type": "checking", "opening_balance": 0}
+    )
+    accounts = (await auth_client.get(f"{API}/accounts")).json()
+    checking = accounts[0]["id"]
+    cats = (await auth_client.get(f"{API}/categories")).json()
+    rent = next(c for c in cats if c["name"] == "Rent")
+
+    # Current + previous month both have spending so the average is not diluted.
+    for offset_months in (1, 0):
+        year = today.year
+        month = today.month - offset_months
+        while month < 1:
+            month += 12
+            year -= 1
+        await auth_client.post(
+            f"{API}/transactions",
+            json={"account_id": checking, "category_id": rent["id"],
+                  "date": f"{year}-{month:02d}-01", "amount": -500.0, "description": "Rent"},
+        )
+
+    body = (await auth_client.get(f"{API}/health-score")).json()
+    fund = next(s for s in body["subscores"] if s["key"] == "emergency_fund")
+    # ~$1000 average expense; with no liquid assets the fund cannot be 100.
+    assert fund["score"] == 0.0  # no assets -> nothing covered
+
+
+async def test_inactive_credit_cards_excluded_from_dashboard_net_worth(auth_client):
+    """Regression: inactive cards and debts must not count toward net worth."""
+    await auth_client.post(
+        f"{API}/accounts", json={"name": "Checking", "type": "checking", "opening_balance": 5000}
+    )
+    card = await auth_client.post(
+        f"{API}/credit-cards", json={"name": "Closed Visa", "balance": 3000, "credit_limit": 5000, "apr": 20}
+    )
+    debt = await auth_client.post(
+        f"{API}/debts", json={"name": "Sold Car", "type": "auto", "principal": 8000, "interest_rate": 4}
+    )
+    await auth_client.put(f"{API}/credit-cards/{card.json()['id']}", json={"is_active": False})
+    await auth_client.put(f"{API}/debts/{debt.json()['id']}", json={"is_active": False})
+
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert body["net_worth"] == 5000.0  # only the checking balance remains
+    assert body["debt"]["total"] == 0.0

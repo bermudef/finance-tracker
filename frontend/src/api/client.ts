@@ -17,26 +17,26 @@ export interface AuthTokens {
   token_type: string;
 }
 
-// ---- token storage (localStorage for demo simplicity; HttpOnly cookies in prod) ----
-const ACCESS_KEY = "ft_access_token";
-const REFRESH_KEY = "ft_refresh_token";
+// ---- token storage (in-memory to reduce XSS exposure while cookies are used for persistence) ----
+let inMemoryAccessToken: string | null = null;
+let inMemoryRefreshToken: string | null = null;
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY);
+  return inMemoryAccessToken;
 }
 
 export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
+  return inMemoryRefreshToken;
 }
 
 export function storeTokens(t: AuthTokens): void {
-  localStorage.setItem(ACCESS_KEY, t.access_token);
-  localStorage.setItem(REFRESH_KEY, t.refresh_token);
+  inMemoryAccessToken = t.access_token;
+  inMemoryRefreshToken = t.refresh_token;
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  inMemoryAccessToken = null;
+  inMemoryRefreshToken = null;
 }
 
 async function request<T>(
@@ -50,7 +50,7 @@ async function request<T>(
   const token = getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...options, credentials: "include", headers });
 
   if (res.status === 401 && retry) {
     // Attempt one refresh-token retry before failing.
@@ -77,6 +77,7 @@ async function refreshAccessToken(): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refresh }),
     });
@@ -120,6 +121,7 @@ export interface ImportResult {
 export async function exportTransactionsCsv(): Promise<Blob> {
   const token = getAccessToken();
   const res = await fetch(`${API_BASE}/transactions/export`, {
+    credentials: "include",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new ApiError(res.status, `Export failed (${res.status})`);
@@ -133,6 +135,7 @@ export async function importTransactionsCsv(file: File): Promise<ImportResult> {
   form.append("file", file);
   const res = await fetch(`${API_BASE}/transactions/import`, {
     method: "POST",
+    credentials: "include",
     body: form,
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -150,6 +153,7 @@ export async function importTransactionsCsv(file: File): Promise<ImportResult> {
 async function exportCsvBlob(path: string): Promise<Blob> {
   const token = getAccessToken();
   const res = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new ApiError(res.status, `Export failed (${res.status})`);
@@ -204,6 +208,7 @@ export interface Transaction {
   id: number;
   account_id: number;
   category_id: number | null;
+  recurring_id: number | null;
   date: string;
   amount: number;
   description: string | null;
@@ -211,6 +216,8 @@ export interface Transaction {
   status: string;
   account_name?: string | null;
   category_name?: string | null;
+  recurring_name?: string | null;
+  is_recurring: boolean;
 }
 
 export interface Budget {
@@ -341,6 +348,7 @@ export interface HealthSubscore {
   label: string;
   score: number;
   weight: number;
+  status: "on_track" | "at_risk" | "over";
   detail: string;
 }
 

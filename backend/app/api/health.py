@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.models.database import get_db
 from app.models.domain import CreditCard, Debt, SavingsGoal
-from app.models.finance import Account, Budget, Transaction
+from app.models.finance import Account, Transaction
 from app.models.user import User
 from app.services.health_score import compute_health_score
 
@@ -56,14 +56,19 @@ async def gather_health_metrics(db: AsyncSession, user_id: int) -> dict:
     # expects positive magnitudes (savings rate = (income - expense) / income).
     expense_this_month = -await _sum_transactions(db, user_id, month_start, next_month_start, positive=False)
 
-    # Average monthly expense across the current + previous 2 months.
+    # Average monthly expense across the current + previous 2 months. Only
+    # months with actual spending count toward the average: a brand-new user
+    # with a single month of history must not be diluted by two empty months,
+    # which would understate expenses and inflate their emergency-fund score.
     expense_sums = []
     start = month_start
     for _ in range(3):
         end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
-        expense_sums.append(-await _sum_transactions(db, user_id, start, end, positive=False))
+        month_expense = -await _sum_transactions(db, user_id, start, end, positive=False)
+        if month_expense > 0:
+            expense_sums.append(month_expense)
         start = (start - timedelta(days=1)).replace(day=1)
-    avg_monthly_expense = sum(expense_sums) / 3 if expense_sums else 0.0
+    avg_monthly_expense = sum(expense_sums) / len(expense_sums) if expense_sums else 0.0
 
     # --- Liquid assets (bank accounts net of transactions) ---
     account_rows = (
@@ -87,7 +92,11 @@ async def gather_health_metrics(db: AsyncSession, user_id: int) -> dict:
         await db.execute(select(Debt).where(Debt.user_id == user_id, Debt.is_active.is_(True)))
     ).scalars().all()
     card_rows = (
-        await db.execute(select(CreditCard).where(CreditCard.user_id == user_id))
+        await db.execute(
+            select(CreditCard).where(
+                CreditCard.user_id == user_id, CreditCard.is_active.is_(True)
+            )
+        )
     ).scalars().all()
     monthly_debt_payments = sum(
         float(d.min_payment or 0) for d in debt_rows
@@ -96,33 +105,12 @@ async def gather_health_metrics(db: AsyncSession, user_id: int) -> dict:
     credit_limit = sum(float(c.credit_limit or 0) for c in card_rows)
 
     # --- Budget adherence (same projected-status logic as the dashboard) ---
-    budget_rows = (await db.execute(select(Budget).where(Budget.user_id == user_id))).scalars().all()
-    days_in_month = (next_month_start - month_start).days
-    days_elapsed = max((today - month_start).days + 1, 1)
+    from app.services.budget_status import compute_budget_statuses
+
+    budget_list = await compute_budget_statuses(db, user_id, today)
     statuses = {"on_track": 0, "at_risk": 0, "over": 0}
-    for b in budget_rows:
-        spent_query = select(func.coalesce(func.sum(-Transaction.amount), 0)).where(
-            Transaction.date >= month_start,
-            Transaction.date < next_month_start,
-            Transaction.amount < 0,
-            Transaction.user_id == user_id,
-        )
-        if b.category_id is not None:
-            spent_query = spent_query.where(Transaction.category_id == b.category_id)
-        spent = float((await db.execute(spent_query)).scalar() or 0)
-        amount = float(b.amount or 0)
-        # A budget is "over" only when actual spend has exceeded the limit.
-        # Otherwise, project month-end spend: while days remain, a projected
-        # overrun is a live warning ("at risk") that can still be rescued. On
-        # the last day the projection is final, so merely being >75% used is
-        # "on track", not "at risk".
-        projected = spent / days_elapsed * days_in_month if spent > 0 else 0.0
-        if amount > 0 and spent >= amount:
-            statuses["over"] += 1
-        elif amount > 0 and days_elapsed < days_in_month and projected >= 0.75 * amount:
-            statuses["at_risk"] += 1
-        else:
-            statuses["on_track"] += 1
+    for b in budget_list:
+        statuses[b["status"]] += 1
 
     # --- Savings goals ---
     goal_rows = (

@@ -45,13 +45,17 @@ async def test_recurring_process_posts_and_advances(auth_client):
     assert process.status_code == 200, process.text
     assert process.json()["posted"] == 1
 
-    # The transaction exists with the recurring item's date and description.
+    # The transaction exists with the recurring item's date and description,
+    # and is linked back to its schedule so the UI can badge/filter it.
     txs = await auth_client.get(f"{API}/transactions")
     assert txs.status_code == 200, txs.text
     posted = [t for t in txs.json() if t.get("merchant") == "Netflix"]
     assert len(posted) == 1
     assert posted[0]["amount"] == -15.99
     assert posted[0]["description"] == "Recurring: Netflix"
+    assert posted[0]["recurring_id"] == item_id
+    assert posted[0]["is_recurring"] is True
+    assert posted[0]["recurring_name"] == "Netflix"
 
     # next_date rolled forward to the next month, same day-of-month (clamped
     # to the last valid day like bill scheduling).
@@ -67,6 +71,45 @@ async def test_recurring_process_posts_and_advances(auth_client):
     # Processing again is a no-op until the next due date arrives.
     again = await auth_client.post(f"{API}/recurring-transactions/process")
     assert again.json()["posted"] == 0
+
+
+async def test_overdue_recurring_posts_current_period(auth_client):
+    """An overdue schedule materializes in the current period, not on its
+    stale back-dated next_date, so the row is visible near the top of the
+    feed (and the badge shows) instead of buried months ago."""
+    account_id, _ = await _setup_account_category(auth_client)
+    stale = date.today() - timedelta(days=90)
+
+    create = await auth_client.post(
+        f"{API}/recurring-transactions",
+        json={
+            "name": "Streaming bundle",
+            "account_id": account_id,
+            "amount": -15.99,
+            "frequency": "monthly",
+            "next_date": stale.isoformat(),
+        },
+    )
+    assert create.status_code == 201, create.text
+
+    process = await auth_client.post(f"{API}/recurring-transactions/process")
+    assert process.status_code == 200, process.text
+    assert process.json()["posted"] == 1
+
+    txs = await auth_client.get(f"{API}/transactions")
+    posted = [t for t in txs.json() if t.get("merchant") == "Streaming bundle"]
+    assert len(posted) == 1
+    assert posted[0]["is_recurring"] is True
+
+    today = date.today()
+    recent = posted[0]["date"]
+    assert date.fromisoformat(recent) <= today
+    assert (today - date.fromisoformat(recent)).days <= 31  # same period, not 3 months back
+
+    # Schedule rolled forward past the posted date, not re-anchored to today.
+    detail = await auth_client.get(f"{API}/recurring-transactions")
+    item = next(i for i in detail.json() if i["id"] == create.json()["id"])
+    assert item["next_date"] > recent
 
 
 async def test_recurring_inactive_items_are_skipped(auth_client):
@@ -89,6 +132,50 @@ async def test_recurring_inactive_items_are_skipped(auth_client):
 
     process = await auth_client.post(f"{API}/recurring-transactions/process")
     assert process.json()["posted"] == 0
+
+
+async def test_due_recurring_auto_posts_on_login(client, user_data):
+    """Due recurring items materialize into transactions when the user logs in,
+    so recurring payments show up in the transactions feed without a manual
+    'Process now' click."""
+    reg = await client.post(f"{API}/auth/register", json=user_data)
+    assert reg.status_code == 201, reg.text
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    account = await client.post(
+        f"{API}/accounts",
+        json={"name": "Checking", "type": "checking", "opening_balance": 0},
+        headers=headers,
+    )
+    account_id = account.json()["id"]
+
+    create = await client.post(
+        f"{API}/recurring-transactions",
+        json={
+            "name": "Online storage",
+            "account_id": account_id,
+            "amount": -9.99,
+            "frequency": "monthly",
+            "next_date": (date.today() - timedelta(days=3)).isoformat(),
+        },
+        headers=headers,
+    )
+    assert create.status_code == 201, create.text
+
+    txs = await client.get(f"{API}/transactions", headers=headers)
+    assert txs.json() == []  # nothing posted yet
+
+    login = await client.post(
+        f"{API}/auth/login",
+        json={"email": user_data["email"], "password": user_data["password"]},
+    )
+    assert login.status_code == 200, login.text
+
+    txs = await client.get(f"{API}/transactions", headers=headers)
+    posted = [t for t in txs.json() if t.get("merchant") == "Online storage"]
+    assert len(posted) == 1
+    assert posted[0]["is_recurring"] is True
 
 
 # ---------- CSV exports ----------

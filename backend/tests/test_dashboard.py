@@ -167,27 +167,14 @@ async def test_budget_spent_tracking(auth_client):
     assert budget["spent"] == 150.0
     assert budget["progress_pct"] == 50.0
 
-    # Projected spend and status derive from today's date — mirror the formula.
-    days_in_month = budget["days_in_month"]
-    days_elapsed = budget["days_elapsed"]
-    projected = round(150.0 / days_elapsed * days_in_month, 2)
-    assert budget["projected"] == projected
-    # Status mirrors the router: over only once actual spend exceeds the
-    # budget; otherwise at risk while days remain and the projection is >=75%.
-    expected_status = (
-        "over"
-        if 150.0 >= 300.0
-        else (
-            "at_risk"
-            if days_elapsed < days_in_month and projected >= 225.0
-            else "on_track"
-        )
-    )
-    assert budget["status"] == expected_status
+    # A single expense in a budget is treated as a fixed monthly charge rather
+    # than a daily run-rate that repeats all month.
+    assert budget["projected"] == 150.0
+    assert budget["status"] == "on_track"
 
 
 async def test_budget_status_flags_over_budget(auth_client):
-    """Spending 120% of the budget is always 'over', regardless of the date."""
+    """Spending 120% of the budget is 'at risk', regardless of the date."""
     _, category_ids = await _seed(
         auth_client,
         balances={"Checking": 0},
@@ -204,7 +191,28 @@ async def test_budget_status_flags_over_budget(auth_client):
     budget = body["budgets"][0]
     assert budget["spent"] == 120.0
     assert budget["progress_pct"] == 120.0
-    assert budget["status"] == "over"
+    assert budget["status"] == "at_risk"
+
+
+async def test_fixed_monthly_budget_does_not_extrapolate_single_payment(auth_client):
+    """One large monthly payment should not be projected as daily recurring spend."""
+    _, category_ids = await _seed(
+        auth_client,
+        balances={"Checking": 0},
+        transactions=[
+            {"account": "Checking", "category": "Groceries", "date": TODAY, "amount": -1800,
+             "description": "Mortgage"},
+        ],
+    )
+    await auth_client.post(
+        f"{API}/budgets",
+        json={"name": "Housing", "category_id": category_ids["Groceries"], "amount": 1800},
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    budget = body["budgets"][0]
+    assert budget["spent"] == 1800.0
+    assert budget["projected"] == 1800.0
+    assert budget["status"] == "at_risk"
 
 
 async def test_budget_status_guards_zero_amount(auth_client):

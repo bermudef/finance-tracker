@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 # ---------- Accounts ----------
@@ -57,6 +57,7 @@ class TransactionOut(BaseModel):
     id: int
     account_id: int
     category_id: Optional[int]
+    recurring_id: Optional[int] = None
     date: date
     amount: float
     description: Optional[str]
@@ -64,6 +65,12 @@ class TransactionOut(BaseModel):
     status: str
     account_name: Optional[str] = None
     category_name: Optional[str] = None
+    recurring_name: Optional[str] = None
+
+    @computed_field
+    @property
+    def is_recurring(self) -> bool:
+        return self.recurring_id is not None
 
     model_config = ConfigDict(from_attributes=True)
 

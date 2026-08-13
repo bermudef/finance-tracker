@@ -201,25 +201,17 @@ async def generate_budget_alerts(
     user_id: int,
 ) -> list[dict]:
     """Generate budget alert notifications for over-budget categories."""
-    from app.api.dashboard import compute_budget_statuses
+    from app.services.budget_status import compute_budget_statuses
 
     budgets = await compute_budget_statuses(db, user_id)
     alerts = []
 
     for budget in budgets:
-        if budget.get("status") == "over":
-            alerts.append(
-                {
-                    "title": f"Over budget: {budget['name']}",
-                    "message": f"You've spent {budget['spent']:.2f} against a {budget['amount']:.2f} budget.",
-                    "type": "budget_alert",
-                }
-            )
-        elif budget.get("status") == "at_risk":
+        if budget.get("status") == "at_risk":
             alerts.append(
                 {
                     "title": f"At risk: {budget['name']}",
-                    "message": f"You're on pace to exceed your {budget['amount']:.2f} budget for {budget['name']}.",
+                    "message": f"You've spent {budget['spent']:.2f} against a {budget['amount']:.2f} budget for {budget['name']}.",
                     "type": "budget_alert",
                 }
             )

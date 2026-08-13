@@ -19,6 +19,12 @@ const SCORE_COLORS: Record<string, string> = {
   savings_goals: "bg-teal-500",
 };
 
+const STATUS_LABEL: Record<HealthScore["subscores"][number]["status"], string> = {
+  on_track: "On track",
+  at_risk: "At risk",
+  over: "Over",
+};
+
 export default function HealthPage() {
   const [data, setData] = useState<HealthScore | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +107,17 @@ export default function HealthPage() {
                   <div className="flex items-center gap-2">
                     <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       {s.weight}%
+                    </span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        s.status === "on_track"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : s.status === "at_risk"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {STATUS_LABEL[s.status]}
                     </span>
                     <span className="w-10 text-right text-sm font-semibold tabular-nums text-slate-900">
                       {s.score}

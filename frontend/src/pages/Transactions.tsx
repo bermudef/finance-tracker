@@ -16,6 +16,7 @@ export default function TransactionsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [accountFilter, setAccountFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "one_time" | "recurring">("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -77,6 +78,8 @@ export default function TransactionsPage() {
     return transactions.filter((t) => {
       if (accountFilter && t.account_id !== Number(accountFilter)) return false;
       if (categoryFilter && t.category_id !== Number(categoryFilter)) return false;
+      if (typeFilter === "recurring" && !t.is_recurring) return false;
+      if (typeFilter === "one_time" && t.is_recurring) return false;
       if (search) {
         const q = search.toLowerCase();
         const haystack = `${t.description ?? ""} ${t.merchant ?? ""} ${t.category_name ?? ""}`.toLowerCase();
@@ -84,7 +87,7 @@ export default function TransactionsPage() {
       }
       return true;
     });
-  }, [transactions, accountFilter, categoryFilter, search]);
+  }, [transactions, accountFilter, categoryFilter, typeFilter, search]);
 
   if (loading) return <p className="text-sm text-slate-500">Loading transactions…</p>;
 
@@ -157,6 +160,15 @@ export default function TransactionsPage() {
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as "all" | "one_time" | "recurring")}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="all">All types</option>
+          <option value="one_time">One-time</option>
+          <option value="recurring">Recurring</option>
+        </select>
       </Card>
 
       <Card className="overflow-x-auto p-0">
@@ -175,7 +187,12 @@ export default function TransactionsPage() {
               <tr key={t.id} className="hover:bg-slate-50">
                 <td className="whitespace-nowrap px-5 py-3 text-slate-600">{formatDate(t.date)}</td>
                 <td className="px-5 py-3 font-medium text-slate-800">
-                  {t.description || t.merchant || "—"}
+                  <div className="flex items-center gap-2">
+                    <span>{t.description || t.merchant || "—"}</span>
+                    {t.is_recurring && (
+                      <Badge tone="blue">Recurring</Badge>
+                    )}
+                  </div>
                 </td>
                 <td className="px-5 py-3 text-slate-600">{t.account_name}</td>
                 <td className="px-5 py-3">
