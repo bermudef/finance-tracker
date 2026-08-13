@@ -100,7 +100,7 @@ def latest_occurrence(due_date: date, frequency: str, today: date) -> date:
 
 
 def upcoming_bills(
-    bills: list[Any], today: date, limit: int = DEFAULT_LIMIT
+    bills: list[Any], today: date, limit: int | None = DEFAULT_LIMIT
 ) -> list[dict[str, Any]]:
     """Sort bills by days until their next due date and return the top `limit`.
 
@@ -123,4 +123,4 @@ def upcoming_bills(
             }
         )
     rows.sort(key=lambda r: r["days_until"])
-    return rows[:limit]
+    return rows if limit is None else rows[:limit]

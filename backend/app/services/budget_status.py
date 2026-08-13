@@ -33,6 +33,7 @@ async def _spent_for_budget(
         Transaction.date >= period_start,
         Transaction.date < period_end,
         Transaction.amount < 0,
+        Transaction.status != "pending",
         Transaction.user_id == user_id,
     )
     if category_id is not None:
@@ -57,6 +58,7 @@ async def _expense_transaction_count(
         Transaction.date >= period_start,
         Transaction.date < period_end,
         Transaction.amount < 0,
+        Transaction.status != "pending",
         Transaction.user_id == user_id,
     )
     if category_id is not None:

@@ -49,6 +49,7 @@ async def monthly_report(
                     Transaction.user_id == user_id,
                     Transaction.date >= lo,
                     Transaction.date < hi,
+                    Transaction.status != "pending",
                     Transaction.amount > 0,
                 )
             )
@@ -59,6 +60,7 @@ async def monthly_report(
                     Transaction.user_id == user_id,
                     Transaction.date >= lo,
                     Transaction.date < hi,
+                    Transaction.status != "pending",
                     Transaction.amount < 0,
                 )
             )
@@ -83,6 +85,7 @@ async def monthly_report(
                 Transaction.user_id == user_id,
                 Transaction.date >= start,
                 Transaction.date < end,
+                Transaction.status != "pending",
                 Transaction.amount < 0,
             )
             .group_by(Category.name)
@@ -100,6 +103,7 @@ async def monthly_report(
                 Transaction.user_id == user_id,
                 Transaction.date >= start,
                 Transaction.date < end,
+                Transaction.status != "pending",
                 Transaction.amount < 0,
                 Transaction.category_id.is_(None),
             )
@@ -130,6 +134,7 @@ async def monthly_report(
                 Transaction.user_id == user_id,
                 Transaction.date >= start,
                 Transaction.date < end,
+                Transaction.status != "pending",
             )
             .group_by(Account.id)
             .order_by(Account.name)
@@ -157,6 +162,7 @@ async def monthly_report(
                 Transaction.user_id == user_id,
                 Transaction.date >= start,
                 Transaction.date < end,
+                Transaction.status != "pending",
                 Transaction.amount < 0,
                 Transaction.merchant.isnot(None),
             )
@@ -184,6 +190,7 @@ async def monthly_report(
                     Transaction.user_id == user_id,
                     Transaction.date >= start,
                     Transaction.date < end,
+                    Transaction.status != "pending",
                     Transaction.amount > 0 if sign == "income" else Transaction.amount < 0,
                 )
                 .group_by("day")

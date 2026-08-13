@@ -94,7 +94,7 @@ SCENARIOS: list[dict[str, Any]] = [
             {"name": "Apartment rent", "amount": -2150.00, "day": 3, "account": "Checking", "category": "Rent", "frequency": "monthly"},
             {"name": "Streaming bundle", "amount": -140.00, "day": 24, "account": "Checking", "category": "Subscriptions", "frequency": "monthly"},
             {"name": "Electric & water", "amount": -320.00, "day": 12, "account": "Checking", "category": "Utilities", "frequency": "monthly"},
-            {"name": "Health insurance", "amount": -410.00, "day": 22, "account": "Checking", "category": "Insurance", "frequency": "monthly"},
+            {"name": "Health insurance", "amount": -285.00, "day": 22, "account": "Checking", "category": "Insurance", "frequency": "monthly"},
         ],
         "credit_cards": [
             ("Chase Sapphire Preferred", 2600.00, 9000.00, 18.99, 12),
@@ -157,13 +157,14 @@ SCENARIOS: list[dict[str, Any]] = [
         "recurring_transactions": [
             {"name": "Mortgage payment", "amount": -2750.00, "day": 3, "account": "Checking", "category": "Mortgage", "frequency": "monthly"},
             {"name": "Electric & water", "amount": -420.00, "day": 10, "account": "Checking", "category": "Utilities", "frequency": "monthly"},
-            {"name": "Home insurance", "amount": -520.00, "day": 20, "account": "Checking", "category": "Insurance", "frequency": "monthly"},
+            {"name": "Home insurance", "amount": -295.00, "day": 20, "account": "Checking", "category": "Insurance", "frequency": "monthly"},
             {"name": "Streaming bundle", "amount": -140.00, "day": 24, "account": "Checking", "category": "Subscriptions", "frequency": "monthly"},
         ],
         "credit_cards": [
             ("Chase Freedom Unlimited", 4100.00, 16000.00, 19.80, 17),
         ],
         "debts": [
+            ("Mortgage", "mortgage", 365000.00, 5.85, 2750.00, 300),
             ("Auto Loan", "auto", 14500.00, 4.70, 410.00, 48),
         ],
         "investments": [
@@ -227,7 +228,7 @@ SCENARIOS: list[dict[str, Any]] = [
             {"name": "Apartment rent", "amount": -2450.00, "day": 3, "account": "Checking", "category": "Rent", "frequency": "monthly"},
             {"name": "Childcare", "amount": -1550.00, "day": 7, "account": "Checking", "category": "Childcare", "frequency": "monthly"},
             {"name": "Utilities", "amount": -340.00, "day": 12, "account": "Checking", "category": "Utilities", "frequency": "monthly"},
-            {"name": "Car insurance", "amount": -310.00, "day": 18, "account": "Checking", "category": "Insurance", "frequency": "monthly"},
+            {"name": "Car insurance", "amount": -275.00, "day": 18, "account": "Checking", "category": "Insurance", "frequency": "monthly"},
             {"name": "Streaming bundle", "amount": -140.00, "day": 24, "account": "Checking", "category": "Subscriptions", "frequency": "monthly"},
         ],
         "credit_cards": [
@@ -294,7 +295,7 @@ SCENARIOS: list[dict[str, Any]] = [
             {"name": "Rent payment", "amount": -2250.00, "day": 3, "account": "Checking", "category": "Rent", "frequency": "monthly"},
             {"name": "Childcare", "amount": -1000.00, "day": 8, "account": "Checking", "category": "Childcare", "frequency": "monthly"},
             {"name": "Utilities", "amount": -390.00, "day": 11, "account": "Checking", "category": "Utilities", "frequency": "monthly"},
-            {"name": "Car insurance", "amount": -310.00, "day": 20, "account": "Checking", "category": "Insurance", "frequency": "monthly"},
+            {"name": "Car insurance", "amount": -265.00, "day": 20, "account": "Checking", "category": "Insurance", "frequency": "monthly"},
             {"name": "Streaming bundle", "amount": -140.00, "day": 24, "account": "Checking", "category": "Subscriptions", "frequency": "monthly"},
             {"name": "Phone + streaming", "amount": -120.00, "day": 27, "account": "Checking", "category": "Subscriptions", "frequency": "monthly"},
         ],

@@ -357,6 +357,43 @@ async def test_assistant_unknown_intent(auth_client):
     assert "spending" in body["answer"].lower() or "savings" in body["answer"].lower()
 
 
+async def test_assistant_excludes_pending_transactions_from_cash_flow(auth_client):
+    account = await auth_client.post(
+        f"{API}/accounts", json={"name": "Checking", "type": "checking", "opening_balance": 0}
+    )
+    account_id = account.json()["id"]
+    salary = await auth_client.post(f"{API}/categories", json={"name": "Salary", "type": "income"})
+    groceries = await auth_client.post(f"{API}/categories", json={"name": "Groceries", "type": "expense"})
+    await auth_client.post(
+        f"{API}/transactions",
+        json={
+            "account_id": account_id,
+            "category_id": salary.json()["id"],
+            "date": date.today().isoformat(),
+            "amount": 3000.0,
+            "description": "Posted salary",
+            "status": "posted",
+        },
+    )
+    await auth_client.post(
+        f"{API}/transactions",
+        json={
+            "account_id": account_id,
+            "category_id": groceries.json()["id"],
+            "date": date.today().isoformat(),
+            "amount": -250.0,
+            "description": "Pending groceries",
+            "status": "pending",
+        },
+    )
+    resp = await auth_client.post(
+        f"{API}/tools/assistant",
+        json={"question": "How much did I spend this month?"},
+    )
+    assert resp.status_code == 200
+    assert "don't have enough spending data yet" in resp.json()["answer"].lower()
+
+
 # ---- notifications tests ----
 
 
@@ -424,6 +461,43 @@ async def test_notifications_generate_from_bills(auth_client):
     # Idempotent: generating again must not duplicate unread notifications.
     resp = await auth_client.post(f"{API}/notifications/generate")
     assert resp.json() == []
+
+
+async def test_notifications_generate_from_recurring_bill_schedule(auth_client):
+    """Recurring bills should be reminded based on their next scheduled due date."""
+    await auth_client.post(
+        f"{API}/bills",
+        json={
+            "name": "Gym",
+            "amount": 29.99,
+            "due_date": (date.today() - timedelta(days=1)).isoformat(),
+            "frequency": "weekly",
+        },
+    )
+    resp = await auth_client.post(f"{API}/notifications/generate")
+    assert resp.status_code == 200
+    created = resp.json()
+    assert any(
+        n["type"] == "bill_reminder" and "Gym" in n["title"] for n in created
+    ), f"expected a Gym bill reminder, got {created}"
+
+
+async def test_bill_reminders_do_not_materialize_transactions(auth_client):
+    """Bills and recurring transactions are separate concepts: reminding a bill
+    must not create feed transactions or double-count spending."""
+    await auth_client.post(
+        f"{API}/bills",
+        json={
+            "name": "Electricity",
+            "amount": 120.00,
+            "due_date": (date.today() + timedelta(days=2)).isoformat(),
+            "frequency": "monthly",
+        },
+    )
+    await auth_client.post(f"{API}/notifications/generate")
+    txs = await auth_client.get(f"{API}/transactions")
+    assert txs.status_code == 200
+    assert txs.json() == []
 
     # Budget alert path: an over-budget category produces a budget_alert.
     await auth_client.post(f"{API}/categories", json={"name": "Dining", "type": "expense"})

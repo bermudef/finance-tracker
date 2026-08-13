@@ -34,6 +34,7 @@ async def _sum_transactions(
     query = select(func.coalesce(func.sum(Transaction.amount), 0)).where(
         Transaction.date >= start,
         Transaction.date < end,
+        Transaction.status != "pending",
         Transaction.user_id == user_id,
     )
     query = query.where(Transaction.amount > 0) if positive else query.where(Transaction.amount < 0)
@@ -81,7 +82,8 @@ async def gather_health_metrics(db: AsyncSession, user_id: int) -> dict:
         tx_sum = (
             await db.execute(
                 select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-                    Transaction.account_id == a.id
+                    Transaction.account_id == a.id,
+                    Transaction.status != "pending",
                 )
             )
         ).scalar()

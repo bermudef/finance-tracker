@@ -27,6 +27,7 @@ async def get_dashboard(
     user_id = current_user.id
     today = date.today()
     month_start = today.replace(day=1)
+    next_month_start = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
     last_month_start = (month_start - timedelta(days=1)).replace(day=1)
 
     balance_rows = (
@@ -39,7 +40,8 @@ async def get_dashboard(
         tx_sum = (
             await db.execute(
                 select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-                    Transaction.account_id == a.id
+                    Transaction.account_id == a.id,
+                    Transaction.status != "pending",
                 )
             )
         ).scalar()
@@ -57,7 +59,9 @@ async def get_dashboard(
         await db.execute(
             select(func.coalesce(func.sum(Transaction.amount), 0)).where(
                 Transaction.date >= month_start,
+                Transaction.date < next_month_start,
                 Transaction.amount > 0,
+                Transaction.status != "pending",
                 Transaction.user_id == user_id,
             )
         )
@@ -66,7 +70,9 @@ async def get_dashboard(
         await db.execute(
             select(func.coalesce(func.sum(Transaction.amount), 0)).where(
                 Transaction.date >= month_start,
+                Transaction.date < next_month_start,
                 Transaction.amount < 0,
+                Transaction.status != "pending",
                 Transaction.user_id == user_id,
             )
         )
@@ -78,6 +84,7 @@ async def get_dashboard(
                 Transaction.date >= last_month_start,
                 Transaction.date < month_start,
                 Transaction.amount > 0,
+                Transaction.status != "pending",
                 Transaction.user_id == user_id,
             )
         )
@@ -88,6 +95,7 @@ async def get_dashboard(
                 Transaction.date >= last_month_start,
                 Transaction.date < month_start,
                 Transaction.amount < 0,
+                Transaction.status != "pending",
                 Transaction.user_id == user_id,
             )
         )
@@ -100,7 +108,9 @@ async def get_dashboard(
             Category.type == "expense",
             Category.user_id == user_id,
             Transaction.date >= month_start,
+            Transaction.date < next_month_start,
             Transaction.amount < 0,
+            Transaction.status != "pending",
         )
     )
     cat_rows = await db.execute(
@@ -128,6 +138,7 @@ async def get_dashboard(
                     Transaction.date >= first,
                     Transaction.date < nxt,
                     Transaction.amount > 0,
+                    Transaction.status != "pending",
                     Transaction.user_id == user_id,
                 )
             )
@@ -138,14 +149,71 @@ async def get_dashboard(
                     Transaction.date >= first,
                     Transaction.date < nxt,
                     Transaction.amount < 0,
+                    Transaction.status != "pending",
                     Transaction.user_id == user_id,
                 )
             )
         ).scalar()
         last_6_months.append({
             "month": first.strftime("%b %Y"),
+            # Keep expense as a SIGNED (negative) value so the cash-flow area
+            # chart can diverge below the zero baseline, mirroring the monthly
+            # report convention. Negating here makes income and expenses stack
+            # into one indistinguishable rising area.
             "income": round(float(inc), 2),
-            "expense": round(float(-exp), 2),
+            "expense": round(float(exp), 2),
+            "net": round(float(inc) + float(exp), 2),
+        })
+
+    latest_txn_date = (
+        await db.execute(
+            select(func.max(Transaction.date)).where(
+                Transaction.user_id == user_id,
+                Transaction.status != "pending",
+            )
+        )
+    ).scalar()
+    chart_anchor = latest_txn_date or today
+    if chart_anchor < month_start:
+        chart_month_start = chart_anchor.replace(day=1)
+    else:
+        chart_month_start = month_start
+    chart_next_month_start = (chart_month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    days_in_month = (chart_next_month_start - chart_month_start).days
+    month_txns = (
+        await db.execute(
+            select(Transaction)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.date >= chart_month_start,
+                Transaction.date < chart_next_month_start,
+                Transaction.status != "pending",
+            )
+            .order_by(Transaction.date, Transaction.id)
+        )
+    ).scalars().all()
+    income_by_day = [0.0] * days_in_month
+    expense_by_day = [0.0] * days_in_month
+    for txn in month_txns:
+        idx = txn.date.day - 1
+        amount = float(txn.amount)
+        if amount > 0:
+            income_by_day[idx] += amount
+        elif amount < 0:
+            expense_by_day[idx] += -amount
+
+    running_balance = 0.0
+    cumulative_expense = 0.0
+    current_month_series = []
+    for day in range(1, days_in_month + 1):
+        running_balance += income_by_day[day - 1]
+        cumulative_expense += expense_by_day[day - 1]
+        running_balance -= expense_by_day[day - 1]
+        current_month_series.append({
+            "day": day,
+            "balance": round(running_balance, 2),
+            "expense": round(cumulative_expense, 2),
+            "income": round(sum(income_by_day[:day]), 2),
         })
 
     budgets = await compute_budget_statuses(db, user_id)
@@ -209,7 +277,10 @@ async def get_dashboard(
     bill_rows = (
         await db.execute(select(Bill).where(Bill.user_id == user_id, Bill.is_active.is_(True)))
     ).scalars().all()
-    upcoming = upcoming_bills(bill_rows, today)
+    upcoming = [
+        b for b in upcoming_bills(bill_rows, today, limit=None)
+        if 0 <= b["days_until"] <= 30
+    ][:5]
 
     # --- Health summary (reuses the health-score metrics) ---
     metrics = await gather_health_metrics(db, user_id)
@@ -230,6 +301,8 @@ async def get_dashboard(
         },
         "spending_by_category": spending_by_category,
         "monthly_series": last_6_months,
+        "current_month_series_label": chart_month_start.strftime("%B %Y"),
+        "current_month_series": current_month_series,
         "budgets": budgets,
         "net_worth": round(net_worth, 2),
         "net_worth_series": net_worth_series,

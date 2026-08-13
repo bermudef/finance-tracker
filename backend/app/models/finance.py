@@ -92,6 +92,7 @@ class RecurringTransaction(Base):
     amount = Column(Numeric(12, 2), nullable=False)  # positive=income, negative=expense
     frequency = Column(String(20), nullable=False, default="monthly")  # weekly, monthly, yearly
     next_date = Column(Date, nullable=False, index=True)  # next occurrence to post
+    auto_pay = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

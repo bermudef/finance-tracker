@@ -75,6 +75,20 @@ def test_dti_36_percent_is_zero():
     assert debt["score"] == 0.0
 
 
+def test_debt_burden_status_follows_dti_bands():
+    on_track = compute_health_score(_perfect_metrics(monthly_debt_payments=1200.0))  # 15%
+    debt = next(s for s in on_track["subscores"] if s["key"] == "debt_burden")
+    assert debt["status"] == "on_track"
+
+    at_risk = compute_health_score(_perfect_metrics(monthly_debt_payments=2080.0))  # 26%
+    debt = next(s for s in at_risk["subscores"] if s["key"] == "debt_burden")
+    assert debt["status"] == "at_risk"
+
+    over = compute_health_score(_perfect_metrics(monthly_debt_payments=3200.0))  # 40%
+    debt = next(s for s in over["subscores"] if s["key"] == "debt_burden")
+    assert debt["status"] == "over"
+
+
 def test_over_budget_scores_zero_for_adherence():
     result = compute_health_score(
         _perfect_metrics(budget_statuses={"on_track": 0, "at_risk": 0, "over": 2})
@@ -461,3 +475,43 @@ async def test_inactive_credit_cards_excluded_from_dashboard_net_worth(auth_clie
     body = (await auth_client.get(f"{API}/dashboard")).json()
     assert body["net_worth"] == 5000.0  # only the checking balance remains
     assert body["debt"]["total"] == 0.0
+
+
+async def test_health_score_excludes_pending_transactions(auth_client):
+    from datetime import date
+
+    await auth_client.post(f"{API}/categories", json={"name": "Salary", "type": "income"})
+    await auth_client.post(f"{API}/categories", json={"name": "Groceries", "type": "expense"})
+    await auth_client.post(
+        f"{API}/accounts", json={"name": "Checking", "type": "checking", "opening_balance": 0}
+    )
+    accounts = (await auth_client.get(f"{API}/accounts")).json()
+    checking = accounts[0]["id"]
+    cats = (await auth_client.get(f"{API}/categories")).json()
+    salary = next(c for c in cats if c["name"] == "Salary")
+    groceries = next(c for c in cats if c["name"] == "Groceries")
+    await auth_client.post(
+        f"{API}/transactions",
+        json={
+            "account_id": checking,
+            "category_id": salary["id"],
+            "date": date.today().isoformat(),
+            "amount": 8000.0,
+            "description": "Posted salary",
+            "status": "posted",
+        },
+    )
+    await auth_client.post(
+        f"{API}/transactions",
+        json={
+            "account_id": checking,
+            "category_id": groceries["id"],
+            "date": date.today().isoformat(),
+            "amount": -400.0,
+            "description": "Pending groceries",
+            "status": "pending",
+        },
+    )
+    body = (await auth_client.get(f"{API}/health-score")).json()
+    savings = next(s for s in body["subscores"] if s["key"] == "savings_rate")
+    assert "100%" in savings["detail"]

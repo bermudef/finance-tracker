@@ -1,6 +1,9 @@
 """Accounts CRUD + ownership isolation tests."""
 from __future__ import annotations
 
+import csv
+import io
+
 API = "/api/v1"
 
 ACCOUNT_PAYLOAD = {"name": "Checking", "type": "checking", "opening_balance": 1000}
@@ -59,3 +62,32 @@ async def test_cannot_delete_others_account(auth_client, second_user_headers):
 async def test_delete_missing_account_404(auth_client):
     resp = await auth_client.delete(f"{API}/accounts/99999")
     assert resp.status_code == 404
+
+
+async def test_accounts_export_excludes_pending_from_current_balance(auth_client):
+    created = await auth_client.post(f"{API}/accounts", json=ACCOUNT_PAYLOAD)
+    account_id = created.json()["id"]
+    await auth_client.post(
+        f"{API}/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-08-01",
+            "amount": 200.0,
+            "description": "Posted deposit",
+            "status": "posted",
+        },
+    )
+    await auth_client.post(
+        f"{API}/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-08-02",
+            "amount": -50.0,
+            "description": "Pending card hold",
+            "status": "pending",
+        },
+    )
+
+    exported = await auth_client.get(f"{API}/accounts/export")
+    rows = list(csv.DictReader(io.StringIO(exported.text)))
+    assert rows[0]["current_balance"] == "1200.00"

@@ -238,6 +238,7 @@ export interface RecurringTransactionItem {
   amount: number;
   frequency: "weekly" | "monthly" | "yearly";
   next_date: string;
+  auto_pay: boolean;
   is_active: boolean;
   notes: string | null;
   created_at: string;
@@ -279,7 +280,9 @@ export interface DashboardData {
     last_month_expense: number;
   };
   spending_by_category: Array<{ name: string; amount: number; color: string | null }>;
-  monthly_series: Array<{ month: string; income: number; expense: number }>;
+  monthly_series: Array<{ month: string; income: number; expense: number; net: number }>;
+  current_month_series_label: string;
+  current_month_series: Array<{ day: number; balance: number; expense: number; income: number }>;
   budgets: Array<
     Budget & {
       spent: number;
@@ -557,6 +560,7 @@ export const recurringApi = {
     amount: number;
     frequency: string;
     next_date: string;
+    auto_pay?: boolean;
     notes?: string | null;
   }) => api.post<RecurringTransactionItem>("/recurring-transactions", data),
   update: (id: number, data: Partial<RecurringTransactionItem>) =>
@@ -569,10 +573,6 @@ export const recurringApi = {
 export const investmentsApi = {
   benchmark: (years: number) =>
     api.get<BenchmarkResult>(`/investments/benchmark?years=${years}`),
-};
-
-export const toolsApi = {
-  lossHarvesting: () => api.get<LossHarvestingResult>("/tools/loss-harvesting"),
 };
 
 export const authApi = {

@@ -13,7 +13,7 @@ export default function DebtsPage() {
   return (
     <ResourcePage
       title="Debts"
-      description="Loans and other obligations"
+      description="Mortgages, loans, and other obligations"
       path="/debts"
       fields={[
         { key: "name", label: "Name", type: "text", required: true },

@@ -9,6 +9,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -44,6 +46,11 @@ function Delta({ current, previous }: { current: number; previous: number }) {
   );
 }
 
+function formatSignedCurrency(amount: number): string {
+  const formatted = formatCurrency(amount);
+  return amount < 0 ? `-${formatted}` : formatted;
+}
+
 export default function StatementsPage() {
   const [month, setMonth] = useState(todayValue());
   const [report, setReport] = useState<MonthlyReport | null>(null);
@@ -66,6 +73,18 @@ export default function StatementsPage() {
     return ((report.income - report.expense) / report.income) * 100;
   }, [report]);
 
+  const dailyActivity = useMemo(() => {
+    if (!report) return [];
+    let runningNet = 0;
+    return report.daily_series.map((point) => {
+      runningNet += point.income + point.expense;
+      return {
+        ...point,
+        runningNet: Number(runningNet.toFixed(2)),
+      };
+    });
+  }, [report]);
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -75,6 +94,9 @@ export default function StatementsPage() {
             {report
               ? monthLabel(report.year, report.month)
               : "A month-by-month view of your money"}
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            Pending transactions are excluded until they post or clear.
           </p>
         </div>
         <input
@@ -199,21 +221,44 @@ export default function StatementsPage() {
                 </div>
               )}
             </Card>
-
             <Card>
               <h2 className="mb-4 text-sm font-semibold text-slate-700">Daily activity</h2>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={report.daily_series}>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={dailyActivity} barGap={2} barSize={8}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="day" tick={{ fontSize: 10 }} interval={3} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v / 1000}k`} />
-                  <Tooltip formatter={(v) => formatCurrency(Number(v))} />
-                  <Bar dataKey="income" stackId="a" fill="#10b981" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="expense" stackId="a" fill="#ef4444" radius={[2, 2, 0, 0]} />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 10 }}
+                    interval={3}
+                    tickFormatter={(d) => `${d}`}
+                    tickLine={false}
+                    axisLine={{ stroke: "#e2e8f0" }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(v) => formatCurrency(Number(v), "USD", true)}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={["dataMin", "dataMax"]}
+                  />
+                  <Tooltip
+                    formatter={(v, name) => [
+                      formatSignedCurrency(Number(v)),
+                      name === "runningNet" ? "Running net" : String(name),
+                    ]}
+                    labelFormatter={(d) => `Day ${d}`}
+                  />
+                  <ReferenceLine y={0} stroke="#e2e8f0" strokeWidth={1} />
+                  <Bar dataKey="runningNet" name="Running net" radius={[2, 2, 2, 2]}>
+                    {dailyActivity.map((point) => (
+                      <Cell key={point.day} fill={point.runningNet >= 0 ? "#10b981" : "#ef4444"} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
               <p className="mt-2 text-xs text-slate-400">
-                Income above zero, expenses below. Click a month above to navigate.
+                A running month-to-date histogram: income lifts the bars, and expenses pull
+                them down over time.
               </p>
             </Card>
           </div>

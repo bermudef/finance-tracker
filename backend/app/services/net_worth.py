@@ -54,7 +54,11 @@ async def compute_net_worth_series(
     txns = (
         await db.execute(
             select(Transaction)
-            .where(Transaction.user_id == user_id, Transaction.date <= today)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.date <= today,
+                Transaction.status != "pending",
+            )
             .order_by(Transaction.date)
         )
     ).scalars().all()
@@ -78,11 +82,21 @@ async def compute_net_worth_series(
     )
     debt_total = sum(
         float(d.principal or 0)
-        for d in (await db.execute(select(Debt).where(Debt.user_id == user_id))).scalars()
+        for d in (
+            await db.execute(
+                select(Debt).where(Debt.user_id == user_id, Debt.is_active.is_(True))
+            )
+        ).scalars()
     )
     credit_card_balance = sum(
         float(c.balance or 0)
-        for c in (await db.execute(select(CreditCard).where(CreditCard.user_id == user_id))).scalars()
+        for c in (
+            await db.execute(
+                select(CreditCard).where(
+                    CreditCard.user_id == user_id, CreditCard.is_active.is_(True)
+                )
+            )
+        ).scalars()
     )
     debt_total += credit_card_balance
 

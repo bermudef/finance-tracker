@@ -12,6 +12,7 @@ from app.api.deps import get_current_user
 from app.models.database import get_db
 from app.models.domain import Notification
 from app.models.user import User
+from app.services.bills import upcoming_bills
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -160,11 +161,15 @@ async def generate_bill_reminders(
     db: AsyncSession,
     user_id: int,
 ) -> list[dict]:
-    """Generate bill reminder notifications for bills due within 7 days."""
+    """Generate bill reminder notifications for bills due within 7 days.
+
+    Recurring bills use the same next-occurrence scheduling as the dashboard's
+    "Upcoming bills" card, so a weekly/monthly/yearly bill surfaces
+    consistently across payment-related pages.
+    """
     from app.models.domain import Bill
 
     today = date.today()
-    week_from_now = today + timedelta(days=7)
 
     bills = (
         await db.execute(
@@ -172,24 +177,24 @@ async def generate_bill_reminders(
             .where(
                 Bill.user_id == user_id,
                 Bill.is_active.is_(True),
-                Bill.due_date >= today,
-                Bill.due_date <= week_from_now,
             )
         )
     ).scalars().all()
 
     notifications = []
-    for bill in bills:
-        days_until = (bill.due_date - today).days
+    for bill in upcoming_bills(bills, today, limit=None):
+        days_until = int(bill["days_until"])
+        if not 0 <= days_until <= 7:
+            continue
         if days_until <= 0:
-            title = f"Bill due today: {bill.name}"
-            message = f"{bill.name} of {bill.amount:.2f} is due today."
+            title = f"Bill due today: {bill['name']}"
+            message = f"{bill['name']} of {bill['amount']:.2f} is due today."
         elif days_until == 1:
-            title = f"Bill due tomorrow: {bill.name}"
-            message = f"{bill.name} of {bill.amount:.2f} is due tomorrow."
+            title = f"Bill due tomorrow: {bill['name']}"
+            message = f"{bill['name']} of {bill['amount']:.2f} is due tomorrow."
         else:
-            title = f"Bill due in {days_until} days: {bill.name}"
-            message = f"{bill.name} of {bill.amount:.2f} is due in {days_until} days."
+            title = f"Bill due in {days_until} days: {bill['name']}"
+            message = f"{bill['name']} of {bill['amount']:.2f} is due in {days_until} days."
 
         notifications.append({"title": title, "message": message, "type": "bill_reminder"})
 

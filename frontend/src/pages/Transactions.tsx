@@ -17,6 +17,7 @@ export default function TransactionsPage() {
   const [accountFilter, setAccountFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "one_time" | "recurring">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "posted" | "pending" | "cleared">("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -80,6 +81,7 @@ export default function TransactionsPage() {
       if (categoryFilter && t.category_id !== Number(categoryFilter)) return false;
       if (typeFilter === "recurring" && !t.is_recurring) return false;
       if (typeFilter === "one_time" && t.is_recurring) return false;
+      if (statusFilter !== "all" && t.status !== statusFilter) return false;
       if (search) {
         const q = search.toLowerCase();
         const haystack = `${t.description ?? ""} ${t.merchant ?? ""} ${t.category_name ?? ""}`.toLowerCase();
@@ -87,7 +89,7 @@ export default function TransactionsPage() {
       }
       return true;
     });
-  }, [transactions, accountFilter, categoryFilter, typeFilter, search]);
+  }, [transactions, accountFilter, categoryFilter, typeFilter, statusFilter, search]);
 
   if (loading) return <p className="text-sm text-slate-500">Loading transactions…</p>;
 
@@ -96,7 +98,10 @@ export default function TransactionsPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Transactions</h1>
-          <p className="text-sm text-slate-500">Search, filter, and review your activity</p>
+          <p className="text-sm text-slate-500">
+            Search, filter, and review your activity. Pending items stay visible here but
+            are excluded from balances, budgets, dashboard totals, and statements.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -169,6 +174,16 @@ export default function TransactionsPage() {
           <option value="one_time">One-time</option>
           <option value="recurring">Recurring</option>
         </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as "all" | "posted" | "pending" | "cleared")}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="all">All statuses</option>
+          <option value="posted">Posted</option>
+          <option value="pending">Pending</option>
+          <option value="cleared">Cleared</option>
+        </select>
       </Card>
 
       <Card className="overflow-x-auto p-0">
@@ -192,6 +207,9 @@ export default function TransactionsPage() {
                     {t.is_recurring && (
                       <Badge tone="blue">Recurring</Badge>
                     )}
+                    <Badge tone={t.status === "pending" ? "amber" : t.status === "cleared" ? "green" : "slate"}>
+                      {t.status}
+                    </Badge>
                   </div>
                 </td>
                 <td className="px-5 py-3 text-slate-600">{t.account_name}</td>

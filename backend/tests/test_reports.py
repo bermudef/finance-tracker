@@ -193,3 +193,37 @@ async def test_report_isolated_between_users(auth_client, second_user_headers):
     assert other["income"] == 0.0
     assert other["expense"] == 0.0
     assert other["by_category"] == []
+
+
+async def test_report_excludes_pending_transactions(auth_client):
+    _, category_ids = await _seed(
+        auth_client,
+        [
+            {"account": "Checking", "category": "Salary", "date": TODAY, "amount": 5000,
+             "description": "Posted salary"},
+        ],
+    )
+    accounts = (await auth_client.get(f"{API}/accounts")).json()
+    checking = next(a for a in accounts if a["name"] == "Checking")["id"]
+    await auth_client.post(
+        f"{API}/transactions",
+        json={
+            "account_id": checking,
+            "category_id": category_ids["Groceries"],
+            "date": TODAY.isoformat(),
+            "amount": -125.0,
+            "description": "Pending groceries",
+            "status": "pending",
+        },
+    )
+    body = (
+        await auth_client.get(
+            f"{API}/reports/monthly?year={THIS_YEAR}&month={THIS_MONTH}"
+        )
+    ).json()
+    assert body["income"] == 5000.0
+    assert body["expense"] == 0.0
+    assert body["net"] == 5000.0
+    assert body["by_category"] == []
+    assert body["top_merchants"] == []
+    assert body["daily_series"][TODAY.day - 1]["expense"] == 0.0

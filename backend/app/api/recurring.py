@@ -26,6 +26,7 @@ class RecurringTransactionCreate(BaseModel):
     amount: float = Field(description="Positive = income, negative = expense")
     frequency: str = Field(default="monthly")
     next_date: date
+    auto_pay: bool = False
     notes: Optional[str] = Field(default=None, max_length=500)
 
 
@@ -36,6 +37,7 @@ class RecurringTransactionUpdate(BaseModel):
     amount: Optional[float] = None
     frequency: Optional[str] = None
     next_date: Optional[date] = None
+    auto_pay: Optional[bool] = None
     is_active: Optional[bool] = None
     notes: Optional[str] = Field(default=None, max_length=500)
 
@@ -51,6 +53,7 @@ class RecurringTransactionOut(BaseModel):
     amount: float
     frequency: str
     next_date: date
+    auto_pay: bool
     is_active: bool
     notes: Optional[str] = None
     created_at: datetime
@@ -100,6 +103,7 @@ async def create_recurring(
         amount=data.amount,
         frequency=data.frequency,
         next_date=data.next_date,
+        auto_pay=data.auto_pay,
         notes=data.notes,
     )
     db.add(item)

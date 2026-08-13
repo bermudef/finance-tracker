@@ -22,6 +22,7 @@ const emptyForm = {
   amount: "",
   frequency: "monthly",
   next_date: new Date().toISOString().slice(0, 10),
+  auto_pay: false,
 };
 
 export default function RecurringPage() {
@@ -70,6 +71,7 @@ export default function RecurringPage() {
         amount: Number(form.amount),
         frequency: form.frequency,
         next_date: form.next_date,
+        auto_pay: form.auto_pay,
       });
       setForm(emptyForm);
       setShowForm(false);
@@ -238,6 +240,18 @@ export default function RecurringPage() {
                 ))}
               </select>
             </div>
+            <div className="flex items-center gap-2 pt-6">
+              <input
+                id="recur-autopay"
+                type="checkbox"
+                checked={form.auto_pay}
+                onChange={(e) => setForm((f) => ({ ...f, auto_pay: e.target.checked }))}
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <label className="text-sm font-medium text-slate-700" htmlFor="recur-autopay">
+                Auto-pay
+              </label>
+            </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <button
                 type="submit"
@@ -263,6 +277,7 @@ export default function RecurringPage() {
                 <th className="px-5 py-3 font-medium">Frequency</th>
                 <th className="px-5 py-3 font-medium">Account</th>
                 <th className="px-5 py-3 font-medium">Next occurrence</th>
+                <th className="px-5 py-3 font-medium">Auto-pay</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 text-right font-medium">Actions</th>
               </tr>
@@ -277,6 +292,9 @@ export default function RecurringPage() {
                   <td className="px-5 py-3 capitalize text-slate-600">{item.frequency}</td>
                   <td className="px-5 py-3 text-slate-600">{accountName(item.account_id)}</td>
                   <td className="px-5 py-3 tabular-nums text-slate-600">{item.next_date}</td>
+                  <td className="px-5 py-3">
+                    {item.auto_pay ? <Badge tone="green">Auto</Badge> : <Badge>Manual</Badge>}
+                  </td>
                   <td className="px-5 py-3">
                     {item.is_active ? <Badge tone="green">Active</Badge> : <Badge>Paused</Badge>}
                   </td>
@@ -298,7 +316,7 @@ export default function RecurringPage() {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-slate-400">
+                  <td colSpan={8} className="px-5 py-8 text-center text-slate-400">
                     No recurring items yet. Add rent, subscriptions, or a paycheck above.
                   </td>
                 </tr>

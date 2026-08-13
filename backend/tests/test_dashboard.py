@@ -74,6 +74,44 @@ async def test_dashboard_upcoming_bills(auth_client):
     assert upcoming[1]["next_due_date"] > (TODAY - timedelta(days=20)).isoformat()
 
 
+async def test_dashboard_monthly_totals_ignore_next_month_transactions(auth_client):
+    next_month_start = (MONTH_START.replace(day=28) + timedelta(days=4)).replace(day=1)
+    await _seed(
+        auth_client,
+        balances={"Checking": 0},
+        transactions=[
+            {"account": "Checking", "category": "Salary", "date": TODAY, "amount": 8000,
+             "description": "This month salary"},
+            {"account": "Checking", "category": "Salary", "date": next_month_start, "amount": 9000,
+             "description": "Next month salary"},
+            {"account": "Checking", "category": "Groceries", "date": TODAY, "amount": -100,
+             "description": "This month groceries"},
+            {"account": "Checking", "category": "Groceries", "date": next_month_start, "amount": -250,
+             "description": "Next month groceries"},
+        ],
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert body["monthly"]["income"] == 8000.0
+    assert body["monthly"]["expense"] == 100.0
+    assert body["monthly"]["net"] == 7900.0
+    assert body["spending_by_category"] == [
+        {"name": "Groceries", "amount": 100.0, "color": None}
+    ]
+
+
+async def test_dashboard_upcoming_bills_only_shows_next_30_days(auth_client):
+    await auth_client.post(
+        f"{API}/bills",
+        json={"name": "Rent", "amount": 1850.00, "due_date": (TODAY + timedelta(days=2)).isoformat(), "frequency": "monthly"},
+    )
+    await auth_client.post(
+        f"{API}/bills",
+        json={"name": "Insurance", "amount": 120.00, "due_date": (TODAY + timedelta(days=45)).isoformat(), "frequency": "monthly"},
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert [b["name"] for b in body["upcoming_bills"]] == ["Rent"]
+
+
 async def test_balances_include_opening_and_transactions(auth_client):
     await _seed(
         auth_client,
@@ -117,6 +155,49 @@ async def test_monthly_income_expense_and_category_spending(auth_client):
     assert len(spending) == 1
     assert spending[0]["name"] == "Groceries"
     assert spending[0]["amount"] == 471.05
+    assert body["current_month_series"][TODAY.day - 1]["balance"] == 8000.0 - 471.05
+    assert body["current_month_series"][TODAY.day - 1]["expense"] == 471.05
+
+
+async def test_dashboard_current_month_series_runs_within_month(auth_client):
+    earlier = TODAY.replace(day=1)
+    later = TODAY.replace(day=min(TODAY.day, 2))
+    await _seed(
+        auth_client,
+        balances={"Checking": 0},
+        transactions=[
+            {"account": "Checking", "category": "Salary", "date": earlier, "amount": 3000,
+             "description": "Salary"},
+            {"account": "Checking", "category": "Groceries", "date": later, "amount": -200,
+             "description": "Groceries"},
+        ],
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    series = body["current_month_series"]
+    assert series[0]["balance"] == 3000.0
+    expected_day_2_balance = 2800.0 if later.day == 2 else 3000.0
+    expected_day_2_expense = 200.0 if later.day == 2 else 0.0
+    assert series[1]["balance"] == expected_day_2_balance
+    assert series[1]["expense"] == expected_day_2_expense
+
+
+async def test_dashboard_current_month_series_falls_back_to_latest_month_with_data(auth_client):
+    last_month_day = PREV_MONTH_START.replace(day=1)
+    await _seed(
+        auth_client,
+        balances={"Checking": 0},
+        transactions=[
+            {"account": "Checking", "category": "Salary", "date": last_month_day, "amount": 4000,
+             "description": "Last month salary"},
+            {"account": "Checking", "category": "Groceries", "date": last_month_day, "amount": -250,
+             "description": "Last month groceries"},
+        ],
+    )
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert body["monthly"]["income"] == 0.0
+    assert body["monthly"]["expense"] == 0.0
+    assert body["current_month_series_label"] == PREV_MONTH_START.strftime("%B %Y")
+    assert body["current_month_series"][0]["balance"] == 3750.0
 
 
 async def test_income_never_counts_as_category_spending(auth_client):
@@ -268,6 +349,39 @@ async def test_dashboard_isolated_between_users(auth_client, second_user_headers
     assert other["monthly"]["income"] == 0.0
 
 
+async def test_dashboard_excludes_pending_transactions_from_aggregates(auth_client):
+    await _seed(
+        auth_client,
+        balances={"Checking": 5000},
+        transactions=[
+            {"account": "Checking", "category": "Salary", "date": TODAY, "amount": 1000,
+             "description": "Posted salary"},
+        ],
+    )
+    accounts = (await auth_client.get(f"{API}/accounts")).json()
+    cats = (await auth_client.get(f"{API}/categories")).json()
+    checking = next(a for a in accounts if a["name"] == "Checking")["id"]
+    groceries = next(c for c in cats if c["name"] == "Groceries")["id"]
+    await auth_client.post(
+        f"{API}/transactions",
+        json={
+            "account_id": checking,
+            "category_id": groceries,
+            "date": TODAY.isoformat(),
+            "amount": -250.0,
+            "description": "Pending groceries",
+            "status": "pending",
+        },
+    )
+
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert body["total_balance"] == 6000.0
+    assert body["monthly"]["income"] == 1000.0
+    assert body["monthly"]["expense"] == 0.0
+    assert body["monthly"]["net"] == 1000.0
+    assert body["spending_by_category"] == []
+
+
 async def test_net_worth_assets_minus_liabilities(auth_client):
     await _seed(
         auth_client,
@@ -294,6 +408,28 @@ async def test_net_worth_assets_minus_liabilities(auth_client):
     assert body["investments"]["total_value"] == 1500.0
     assert body["investments"]["total_cost_basis"] == 1000.0
     assert body["investments"]["gain_loss"] == 500.0
+
+
+async def test_net_worth_series_excludes_inactive_liabilities(auth_client):
+    await _seed(
+        auth_client,
+        balances={"Checking": 5000},
+        transactions=[],
+    )
+    card = await auth_client.post(
+        f"{API}/credit-cards",
+        json={"name": "Visa", "balance": 2000, "credit_limit": 5000},
+    )
+    debt = await auth_client.post(
+        f"{API}/debts",
+        json={"name": "Student Loan", "type": "student", "principal": 10000},
+    )
+    await auth_client.put(f"{API}/credit-cards/{card.json()['id']}", json={"is_active": False})
+    await auth_client.put(f"{API}/debts/{debt.json()['id']}", json={"is_active": False})
+
+    body = (await auth_client.get(f"{API}/dashboard")).json()
+    assert body["net_worth"] == 5000.0
+    assert body["net_worth_series"]["series"][-1]["net_worth"] == 5000.0
 
 
 async def test_debt_breakdown_by_type(auth_client):

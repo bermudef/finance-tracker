@@ -1,6 +1,6 @@
 # Finance Tracker
 
-Production-quality personal finance web application. Track income, expenses, accounts, credit cards, debt, investments, savings goals, bills, and net worth — with dashboards and analytics.
+Production-quality personal finance web application. Track income, expenses, accounts, recurring transactions, credit cards, debt, investments, savings goals, and net worth — with dashboards and analytics.
 
 ## Stack
 
@@ -15,9 +15,12 @@ Production-quality personal finance web application. Track income, expenses, acc
 
 - Register, login, refresh, password reset (email-less demo token via dev endpoint)
 - Accounts, categories, budgets, transactions with search + filters
-- Credit cards, debts, investments, savings goals, bills (full CRUD)
+- Credit cards, debts, investments, savings goals, and recurring transactions
 - CSV export/import for transactions (bank-statement-friendly, per-row error reporting)
-- Dashboard: net worth, cash flow, spending by category, debt, investments, savings progress
+- Dashboard: net worth, current-month running cash flow, spending by category, debt, investments, savings progress
+- Monthly statements with pending transactions excluded from totals
+- Transaction statuses (`posted`, `pending`, `cleared`) with filters and inline badges
+- Recurring transactions with auto-pay tracking
 - Ownership isolation: every query and mutation is scoped to the authenticated user
 
 ## Getting Started

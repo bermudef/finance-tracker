@@ -5,6 +5,7 @@ import {
   AreaChart,
   CartesianGrid,
   Cell,
+  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -42,7 +43,10 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-sm text-slate-500">Your money at a glance</p>
+        <p className="text-sm text-slate-500">
+          Your money at a glance. Pending transactions are excluded from balances and totals
+          until they post or clear.
+        </p>
       </header>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -95,6 +99,7 @@ export default function DashboardPage() {
 
         <Card>
           <h2 className="mb-3 text-sm font-semibold text-slate-700">Debt</h2>
+          <p className="mb-2 text-xs text-slate-400">Includes mortgages, loans, and credit cards</p>
           <p className="text-2xl font-semibold tabular-nums text-red-600">
             {formatCurrency(data.debt.total)}
           </p>
@@ -141,27 +146,71 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">Cash flow — last 6 months</h2>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={data.monthly_series}>
+          <h2 className="mb-4 text-sm font-semibold text-slate-700">
+            Cash flow — {data.current_month_series_label}
+          </h2>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={data.current_month_series} margin={{ top: 4, right: 0, left: -8, bottom: 0 }}>
               <defs>
-                <linearGradient id="income" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                <linearGradient id="balance" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.28} />
                   <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="expense" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.24} />
                   <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v / 1000}k`} />
-              <Tooltip formatter={(v) => formatCurrency(Number(v))} />
-              <Area type="monotone" dataKey="income" stroke="#10b981" fill="url(#income)" />
-              <Area type="monotone" dataKey="expense" stroke="#ef4444" fill="url(#expense)" />
+              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                tickFormatter={(v) => formatCurrency(Number(v))}
+                domain={[0, "dataMax"]}
+              />
+              <Tooltip
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null;
+                  const expense = payload.find((item) => item.dataKey === "expense");
+                  const balance = payload.find((item) => item.dataKey === "balance");
+                  return (
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg">
+                      <p className="mb-2 text-xs font-medium text-slate-500">Day {label}</p>
+                      {balance && (
+                        <div className="flex items-center justify-between gap-4 text-sm">
+                          <span className="text-slate-600">Remaining cash</span>
+                          <span className="tabular-nums font-medium text-emerald-600">
+                            {formatCurrency(Number(balance.value ?? 0))}
+                          </span>
+                        </div>
+                      )}
+                      {expense && (
+                        <div className="mt-1 flex items-center justify-between gap-4 text-sm">
+                          <span className="text-slate-600">Cumulative expenses</span>
+                          <span className="tabular-nums font-medium text-red-600">
+                            {formatCurrency(Number(expense.value ?? 0))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }}
+              />
+              <Area type="monotone" dataKey="balance" name="Remaining cash" stroke="#10b981" fill="url(#balance)" strokeWidth={2} />
+              <Area
+                type="monotone"
+                dataKey="expense"
+                name="Cumulative expenses"
+                stroke="#ef4444"
+                fill="url(#expense)"
+                strokeWidth={2}
+              />
+              <Legend verticalAlign="top" height={30} iconSize={10} wrapperStyle={{ paddingTop: 4, fontSize: 11 }} />
             </AreaChart>
           </ResponsiveContainer>
+          <p className="mt-2 text-xs text-slate-400">
+            Green shows remaining cash after posted income and expenses; red shows cumulative expenses. If the current month has no posted activity yet, the chart falls back to the latest populated month.
+          </p>
         </Card>
 
         <Card>
@@ -311,52 +360,6 @@ export default function DashboardPage() {
           </ul>
         </Card>
 
-        <Card>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-700">Upcoming bills</h2>
-            <span className="text-xs text-slate-400">next 30 days</span>
-          </div>
-          {data.upcoming_bills.length === 0 ? (
-            <p className="text-sm text-slate-400">Nothing due in the next 30 days.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {data.upcoming_bills.map((b) => {
-                const soon = b.days_until <= 3;
-                return (
-                  <li key={b.id} className="flex items-center justify-between gap-2 py-2.5">
-                    <div className="min-w-0">
-                      <p className="flex items-center gap-1.5 truncate text-sm font-medium text-slate-800">
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${soon ? "bg-red-500" : "bg-slate-300"}`} />
-                        {b.name}
-                        {b.auto_pay && (
-                          <span className="rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                            auto
-                          </span>
-                        )}
-                      </p>
-                      <p className="mt-0.5 text-xs tabular-nums text-slate-400">
-                        {b.next_due_date}
-                        {b.frequency !== "one-time" && ` · ${b.frequency}`}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold tabular-nums text-slate-900">
-                        {formatCurrency(b.amount)}
-                      </p>
-                      <p className={`text-xs font-medium ${soon ? "text-red-500" : "text-slate-400"}`}>
-                        {b.days_until === 0
-                          ? "due today"
-                          : b.days_until === 1
-                            ? "due tomorrow"
-                            : `in ${b.days_until} days`}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
       </div>
     </div>
   );

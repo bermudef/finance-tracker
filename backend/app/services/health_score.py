@@ -35,6 +35,13 @@ COMPONENTS = [
 DTI_PERFECT = 0.10
 DTI_ZERO = 0.36
 
+# Debt burden status is judged on actual DTI bands, not the normalized score.
+# This keeps the status text aligned with the detail line:
+#     < 20%  -> on track
+#     20-36% -> at risk
+#     > 36%  -> over
+DTI_ON_TRACK = 0.20
+
 # A component is "on track" — healthy enough to skip its recommendation — only
 # once its score is strictly over 75. The same bar applies to every component
 # (savings rate, emergency fund, debt burden, budget adherence, credit
@@ -109,9 +116,15 @@ def _score_debt_burden(monthly_payments: float, monthly_income: float) -> dict[s
         return {"score": 0.0, "status": "over", "detail": "No income to measure debt load against"}
     dti = monthly_payments / monthly_income
     score = _clamp((DTI_ZERO - dti) / (DTI_ZERO - DTI_PERFECT) * 100.0)
+    if dti > DTI_ZERO:
+        status = "over"
+    elif dti >= DTI_ON_TRACK:
+        status = "at_risk"
+    else:
+        status = "on_track"
     return {
         "score": score,
-        "status": _status_from_score(score),
+        "status": status,
         "detail": f"Debt payments are {dti:.0%} of income (target under {DTI_ZERO:.0%})",
     }
 

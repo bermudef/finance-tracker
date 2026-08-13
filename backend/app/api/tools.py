@@ -284,7 +284,20 @@ async def financial_assistant(
         )
     ).scalars().all()
 
-    total_balance = sum(float(a.balance) for a in account_rows)
+    account_balances = {a.id: float(a.opening_balance or 0) for a in account_rows}
+    balance_txns = (
+        await db.execute(
+            sqla_select(Transaction)
+            .where(
+                Transaction.user_id == current_user.id,
+                Transaction.status != "pending",
+            )
+            .order_by(Transaction.date, Transaction.id)
+        )
+    ).scalars().all()
+    for txn in balance_txns:
+        account_balances[txn.account_id] = account_balances.get(txn.account_id, 0.0) + float(txn.amount)
+    total_balance = sum(account_balances.values())
 
     # Get transactions for the month
     txn_rows = (
@@ -294,6 +307,7 @@ async def financial_assistant(
                 Transaction.user_id == current_user.id,
                 Transaction.date >= month_start,
                 Transaction.date < next_month_start,
+                Transaction.status != "pending",
             )
         )
     ).scalars().all()

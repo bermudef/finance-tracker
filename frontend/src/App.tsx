@@ -18,9 +18,7 @@ const CreditCardsPage = lazy(() => import("./pages/CreditCards"));
 const DebtsPage = lazy(() => import("./pages/Debts"));
 const InvestmentsPage = lazy(() => import("./pages/Investments"));
 const SavingsGoalsPage = lazy(() => import("./pages/SavingsGoals"));
-const BillsPage = lazy(() => import("./pages/Bills"));
 const StatementsPage = lazy(() => import("./pages/Statements"));
-const ToolsPage = lazy(() => import("./pages/Tools"));
 const HealthPage = lazy(() => import("./pages/Health"));
 const NotificationsPage = lazy(() => import("./pages/Notifications"));
 const HouseholdsPage = lazy(() => import("./pages/Households"));
@@ -101,9 +99,7 @@ export default function App() {
               <Route path="debts" element={<DebtsPage />} />
               <Route path="investments" element={<InvestmentsPage />} />
               <Route path="savings-goals" element={<SavingsGoalsPage />} />
-              <Route path="bills" element={<BillsPage />} />
               <Route path="statements" element={<StatementsPage />} />
-              <Route path="tools" element={<ToolsPage />} />
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="households" element={<HouseholdsPage />} />
             </Route>

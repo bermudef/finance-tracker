@@ -51,7 +51,10 @@ async def export_accounts(
         sums = (
             await db.execute(
                 select(Transaction.account_id, func.coalesce(func.sum(Transaction.amount), 0))
-                .where(Transaction.user_id == current_user.id)
+                .where(
+                    Transaction.user_id == current_user.id,
+                    Transaction.status != "pending",
+                )
                 .group_by(Transaction.account_id)
             )
         ).all()
